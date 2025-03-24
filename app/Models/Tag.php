@@ -42,6 +42,13 @@ class Tag extends Model
         'updated_by'
 	];
 
+    protected $hidden = [
+      'created_by',
+      'updated_by',
+      'created_at',
+      'updated_at'
+    ];
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -55,8 +62,7 @@ class Tag extends Model
 	public function ayahs()
 	{
 		return $this->belongsToMany(Ayah::class, 'ayah_tags')
-					->withPivot('id', 'notes', 'created_by', 'updated_by', 'approved_by', 'approved_at')
-					->withTimestamps();
+					->withPivot('id', 'notes', 'created_by', 'updated_by', 'approved_by', 'approved_at');
 	}
 
     public function children()

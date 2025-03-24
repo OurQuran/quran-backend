@@ -8,31 +8,65 @@ use Illuminate\Http\Request;
 
 class BookmarksController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $validated = $request->validate([
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ]);
+
+        $page = $validated['page'] ?? 1;
+        $perPage = $validated['per_page'] ?? 10;
+
         try {
+            // Fetch all necessary bookmarks without grouping by surah_id
             $bookmarks = Bookmark::query()
                 ->where("user_id", "=", Auth::id())
-                ->with(['ayah'])
+                ->join('ayahs', 'ayahs.id', '=', 'bookmarks.ayah_id')
+                ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
+                ->select(
+                    'bookmarks.id as bookmark_id',
+                    'surahs.id as surah_id',
+                    'surahs.name_ar as name_ar',
+                    'surahs.name_en as name_en',
+                    'ayahs.id as ayah_id', // Alias to avoid ambiguity
+                    'ayahs.text as ayah_text',
+                    'ayahs.number_in_surah as number_in_surah'
+                )
+                ->skip(($page - 1) * $perPage)
+                ->take($perPage)
                 ->get();
 
-            return $this->apiSuccess($bookmarks, 'Bookmarks returned successfully');
-        } catch (\Exception $e) {
-            return $this->apiError('Failed to retrieve Bookmarks');
-        }
-    }
-
-    public function show(int $id){
-        try {
-            $bookmark = Bookmark::query()->with(['ayah'])->findOrFail($id);
-
-            if($bookmark->user_id !== Auth::id()){
-                return $this->apiError('Bookmark not found', 404);
+            // Check if there are any bookmarks
+            if ($bookmarks->isEmpty()) {
+                return $this->apiSuccess([], 'No bookmarks found');
             }
 
-            return $this->apiSuccess($bookmark, 'Bookmark returned successfully');
+            // Group bookmarks by surah_id
+            $groupedBookmarks = $bookmarks->groupBy('surah_id');
+
+            // Prepare final response
+            $formattedBookmarks = [];
+            foreach ($groupedBookmarks as $surahId => $bookmarksGroup) {
+                // Get the surah's name from the first item in the group
+                $surahName = $bookmarksGroup->first()->name_en; // Or name_ar if you prefer
+                $formattedBookmarks[$surahName] = $bookmarksGroup->map(function ($item) {
+                    return [
+                        'bookmark_id' => $item->bookmark_id,
+                        'surah_id' => $item->surah_id,
+                        'ayah_id' => $item->ayah_id,
+                        'ayah_text' => $item->ayah_text,
+                        'number_in_surah' => $item->number_in_surah,
+                    ];
+                });
+            }
+
+            return $this->apiSuccess([
+                'count' => $bookmarks->count(),
+                'bookmarks' => $formattedBookmarks
+            ], 'Bookmarks returned successfully');
         } catch (\Exception $e) {
-            return $this->apiError('Failed to retrieve Bookmark');
+            return $this->apiError("Failed to retrieve Bookmarks: $e");
         }
     }
 
@@ -59,7 +93,7 @@ class BookmarksController extends Controller
                 'user_id' => $userId
             ]);
 
-            return $this->apiSuccess($bookmark, 'Bookmark created successfully.');
+            return $this->apiSuccess($bookmark, 'Bookmark created successfully.', 201);
         } catch (\Exception $e) {
             return $this->apiError('Failed to create Bookmark');
         }
@@ -70,9 +104,10 @@ class BookmarksController extends Controller
     {
         try {
             $bookmark = Bookmark::query()
-                ->with('ayahs')
-                ->where('id', $id)
-                ->delete();
+                ->where('user_id', "=", Auth::id())
+                ->findOrFail($id);
+
+            $bookmark->delete();
 
             return $this->apiSuccess(null, 'Bookmark deleted successfully');
         } catch (\Exception $e) {

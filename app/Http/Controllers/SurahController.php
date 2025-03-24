@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use App\Models\Surah;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class SurahController extends Controller
 {
@@ -135,10 +137,9 @@ class SurahController extends Controller
 
             return $this->apiSuccess($ayahs, 'Surah returned successfully');
         } catch (\Exception $e) {
-            return $this->apiFail('Failed to retrieve Surah', $e->getMessage());
+            return $this->apiError('Failed to retrieve Surah');
         }
     }
-
 
     // ayah-surah/1 (for bookmarks)
     public function getSurahByAyah(Request $request, int $ayah){
@@ -166,8 +167,10 @@ class SurahController extends Controller
         }
     }
 
+
     private function filterByVerseAndEdition(array $validated, Builder $ayahsQuery): Collection
     {
+        // If a specific verse is provided, apply the filter
         if (!empty($validated['verse']) && $validated['verse'] !== 0) {
             $ayahsQuery->where('number_in_surah', $validated['verse']);
         }
@@ -182,19 +185,36 @@ class SurahController extends Controller
             })
                 ->leftJoin('editions as e', 'e.id', '=', 'ae.edition_id')
                 ->select([
-                    'ayahs.*',
+                    'ayahs.*', // Select all columns from ayahs table
                     DB::raw("CASE
-                    WHEN ayahs.number_in_surah = 0 THEN
-                        (SELECT ae1.data FROM ayah_edition ae1
-                         WHERE ae1.ayah_id = 1 AND ae1.edition_id = $editionId
-                         LIMIT 1)
-                    ELSE ae.data
-                END AS translation")
+                WHEN ayahs.number_in_surah = 0 THEN
+                    (SELECT ae1.data FROM ayah_edition ae1
+                     WHERE ae1.ayah_id = 1 AND ae1.edition_id = $editionId
+                     LIMIT 1)
+                ELSE ae.data
+            END AS translation") // Select translation based on edition
                 ]);
         } else {
             $ayahsQuery->select('ayahs.*'); // Default selection when no edition is provided
         }
 
+        // Manually check for authenticated user
+        $user = $this->checkLoginToken();
+
+        // If a user is authenticated, add a 'bookmarked' field
+        if ($user) {
+            $ayahsQuery->leftJoin('bookmarks as bookmarks', 'bookmarks.ayah_id', '=', 'ayahs.id')
+                // ->where('bookmarks.user_id', '=', $user->id) // Filter by authenticated user
+                ->addSelect([
+                    DB::raw("CASE WHEN bookmarks.ayah_id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked") // Compute 'bookmarked' field
+                ]);
+        } else {
+            // If no authenticated user, just add a 'bookmarked' field with false (to prevent errors)
+            $ayahsQuery->addSelect([DB::raw('FALSE AS bookmarked')]);
+        }
+
+        // Execute the query and return the result as a collection
         return $ayahsQuery->get();
     }
+
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Ayah;
+use App\Models\AyahTag;
 use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,27 +14,38 @@ class TagController extends Controller
     {
         $validated = $request->validate([
             'name' => 'sometimes|string',
-            'include_users' => 'sometimes|boolean',
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
 
-        $query = Tag::query();
+        $page = $validated['page'] ?? 1;
+        $perPage = $validated['per_page'] ?? 10;
 
-        // If 'name' is provided, get the tag and its children recursively
+        // Query only parent tags
+        $query = Tag::query()
+            ->whereNull('parent_id')
+            ->with('allChildren') // Load children
+            ->orderBy('name')
+            ->orderBy('id');
+
+        // Filter by name (case-insensitive)
         if (!empty($validated['name'])) {
-            $query->whereRaw('name ILIKE ?', ["%{$validated['name']}%"])->with('allChildren');
+            $query->whereRaw('name ILIKE ?', ["%{$validated['name']}%"]);
         }
 
-        // Conditionally include creator and updater if requested
-        if (!empty($validated['include_users'])) {
-            $query->with(['creator:id,name', 'updater:id,name']);
-        }
+        // Count total parent tags before pagination
+        $totalParents = $query->count();
 
-        // Sort tags (parent_id first for better hierarchical structure)
-        $tags = $query->orderBy('parent_id')->orderBy('id')->get();
+        // Paginate parent tags
+        $tags = $query->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
 
-        return $this->apiSuccess($tags, 'Tags retrieved successfully');
+        return $this->apiSuccess([
+            'count' => $totalParents, // Total count of parent tags
+            'tags' => $tags // Paginated tag results
+        ], 'Tags retrieved successfully');
     }
-
 
     public function store(Request $request)
     {
@@ -53,12 +65,12 @@ class TagController extends Controller
             $tag->save();
         }
 
-        return $this->apiSuccess($tag, 'Tag created successfully');
+        return $this->apiSuccess($tag, 'Tag created successfully', 201);
     }
 
     public function show(int $id)
     {
-        $tag = Tag::with(['creator:id,name', 'updater:id,name', 'ayahs:id,text'])->findOrFail($id);
+        $tag = Tag::query()->with('allChildren')->findOrFail($id);
 
         return $this->apiSuccess($tag, 'Tag retrieved successfully');
     }
@@ -79,11 +91,7 @@ class TagController extends Controller
 
     public function destroy(int $id)
     {
-        $tag = Tag::find($id);
-
-        if (!$tag) {
-            return $this->apiError('Tag not found', 404);
-        }
+        $tag = Tag::query()->findOrFail($id);
 
         $tag->delete();
         return $this->apiSuccess(null, 'Tag deleted successfully');
@@ -152,8 +160,149 @@ class TagController extends Controller
 
         return $this->apiSuccess(
             ['ayah' => $ayah, 'tag' => $tag],
-            "Tag created (if necessary) and associated with Ayah successfully"
+            "Tag created (if necessary) and associated with Ayah successfully",
+            201
         );
     }
 
+    public function getAyahsAssociatedWithTag(Request $request) {
+        $validated = $request->validate([
+            'name' => 'sometimes|string',
+            'tag_id' => 'sometimes|integer|exists:tags,id',
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100'
+        ]);
+
+        $page = $validated['page'] ?? 1;
+        $perPage = $validated['per_page'] ?? 10;
+
+        // If 'name' or 'tag_id' is provided, filter the specific tag
+        if (!empty($validated['name']) || !empty($validated['tag_id'])) {
+            $tagQuery = Tag::query();
+
+            if (!empty($validated['name'])) {
+                $tagQuery->whereRaw('name ILIKE ?', ["%{$validated['name']}%"]);
+            }
+
+            if (!empty($validated['tag_id'])) {
+                $tagQuery->where('id', $validated['tag_id']);
+            }
+
+            $tag = $tagQuery->firstOrFail();
+
+            // Retrieve ayahs related to the specific tag with pagination
+            $ayahs = $tag->ayahs()
+                ->select(['ayahs.id', 'ayahs.text', 'ayahs.number_in_surah', 'ayahs.surah_id', 'ayahs.page', 'ayahs.hizb_id', 'ayahs.juz_id', 'ayahs.sajda', 'ayahs.ayah_template'])
+                ->paginate($perPage, ['*'], 'page', $page);
+
+            if ($ayahs->isEmpty()) {
+                return $this->apiError('No Ayahs are attached to this tag', 404);
+            }
+
+            // Add tag_name to each ayah and hide the unnecessary fields
+            foreach ($ayahs as $ayah) {
+                $ayah->tag_name = $tag->name;
+                $ayah->makeHidden(['hizb_id', 'juz_id', 'sajda', 'ayah_template']);
+                $ayah->makeHidden('pivot');  // Ensures pivot data is hidden
+            }
+
+            return $this->apiSuccess([
+                'count' => $ayahs->total(), // Total count from pagination object
+                'ayahs' => $ayahs->items() // Get the actual ayah items for the current page
+            ], 'Ayahs retrieved successfully');
+        }
+
+        // If no name or tag_id is provided, return ayahs with tag_name added
+        $tagsWithAyahs = Tag::with([
+            'ayahs' => function ($query) use ($page, $perPage) {
+                $query->select(['ayahs.id', 'ayahs.text', 'ayahs.number_in_surah', 'ayahs.surah_id', 'ayahs.page', 'ayahs.hizb_id', 'ayahs.juz_id', 'ayahs.sajda', 'ayahs.ayah_template'])
+                    ->paginate($perPage, ['*'], 'page', $page);
+            }
+        ]) // Ensures only tags that have ayahs are included
+        ->get();
+
+        // If no ayahs exist for any tag, return a message
+        if ($tagsWithAyahs->isEmpty()) {
+            return $this->apiError('No Ayahs are attached to any tag', 404);
+        }
+
+        // Flatten the result, adding the tag_name to each ayah and hiding the unnecessary fields
+        $ayahsWithTagName = [];
+        $totalAyahsCount = 0;
+
+        foreach ($tagsWithAyahs as $tag) {
+            // Count the total ayahs for each tag before pagination
+            $totalAyahsCount += $tag->ayahs()->count();
+
+            foreach ($tag->ayahs as $ayah) {
+                $ayah->tag_name = $tag->name;
+                $ayah->makeHidden(['hizb_id', 'juz_id', 'sajda', 'ayah_template']);
+                $ayah->makeHidden('pivot');  // Ensures pivot data is hidden
+                $ayahsWithTagName[] = $ayah;
+            }
+        }
+
+        return $this->apiSuccess([
+            'count' => $totalAyahsCount, // Correct total count for all tags
+            'ayahs' => $ayahsWithTagName
+        ], 'Ayahs retrieved successfully');
+    }
+
+    public function getUnapprovedTags(Request $request) {
+        $validated = $request->validate([
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100'
+        ]);
+
+        $page = $validated['page'] ?? 1;
+        $perPage = $validated['per_page'] ?? 10;
+
+        $unapprovedTags = AyahTag::query()
+            ->where('approved_by', '=', null)
+            ->orWhere('approved_at', '=', null)
+            ->orderBy('updated_at', 'desc')
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
+
+        return $this->apiSuccess($unapprovedTags, 'Unapproved associated Tags with Ayahs retrieved successfully');
+    }
+
+    public function approve(Request $request){
+        $validated = $request->validate([
+            'id' => 'required|integer|exists:ayah_tags,id'
+        ]);
+
+        $ayahTag = AyahTag::query()->findOrFail($validated['id']);
+
+        if ($ayahTag->approved_at != null || $ayahTag->approved_by != null){
+           return $this->apiError('This tag is already approved'    );
+        }
+
+        $ayahTag->approved_at = now();
+        $ayahTag->approved_by = Auth::id();
+
+        $ayahTag->save();
+
+        return $this->apiSuccess($ayahTag, 'Tag approved successfully');
+    }
+
+    public function unapprove(Request $request){
+        $validated = $request->validate([
+            'id' => 'required|integer|exists:ayah_tags,id'
+        ]);
+
+        $ayahTag = AyahTag::query()->findOrFail($validated['id']);
+
+        if ($ayahTag->approved_at == null || $ayahTag->approved_by == null){
+            return $this->apiError('This tag is already unapproved');
+        }
+
+        $ayahTag->approved_at = null;
+        $ayahTag->approved_by = null;
+
+        $ayahTag->save();
+
+        return $this->apiSuccess($ayahTag, 'Tag unapproved successfully');
+    }
 }

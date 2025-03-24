@@ -22,13 +22,6 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // Password reset tokens
-        Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('username')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
-
         // Sessions table
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
@@ -86,7 +79,6 @@ return new class extends Migration
         });
 
         Schema::dropIfExists('sessions');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('users');
     }
 };

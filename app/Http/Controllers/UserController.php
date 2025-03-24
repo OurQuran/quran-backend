@@ -12,31 +12,32 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $args = $request->validate([
+        $validated = $request->validate([
             'page' => 'sometimes|int|min:1',
             'per_page' => 'sometimes|int|min:1',
             'name' => 'sometimes|string',
             'username' => 'sometimes|string',
         ]);
 
-        $page = $args['page'] ?? 1;
-        $perPage = $args['per_page'] ?? 20;
+        $page = $validated['page'] ?? 1;
+        $perPage = $validated['per_page'] ?? 20;
 
-        $query = User::query()
-            ->skip($page)
-            ->limit($perPage)
-            ->orderBy('id');
+        $query = User::query()->orderBy('id');
 
-        if (isset($args['name'])) {
-            $query->where('name', $args['name']);
+        if (isset($validated['name'])) {
+            $query->where('name', $validated['name']);
         }
 
-        if (isset($args['username'])) {
-            $query->where('username', $args['username']);
+        // Use ILIKE for PostgreSQL case-insensitive search
+        if (isset($validated['username'])) {
+            $query->whereRaw('username ILIKE ?', ["%{$validated['username']}%"]);
         }
 
         $users = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
+        if ($users->isEmpty()) {
+            return $this->apiSuccess([], 'No users found');
+        }
 
         return $this->apiSuccess($users, 'Users returned successfully');
     }
@@ -44,23 +45,21 @@ class UserController extends Controller
     public function store(Request $request)
     {
         try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'username' => 'required|string|max:255|unique:users',
+                'password' => 'required|string|min:6',
+                'role' => 'required|string|in:user,admin'
+            ]);
 
+            $user = User::create([
+                'name' => $validated['name'],
+                'username' => $validated['username'],
+                'password' => Hash::make($validated['password']),
+                'role' => $validated['role']
+            ]);
 
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'username' => 'required|string|max:255|unique:users',
-            'password' => 'required|string|min:6',
-            'role' => 'required|string|in:user,admin'
-        ]);
-
-        $user = User::create([
-            'name' => $validated['name'],
-            'username' => $validated['username'],
-            'password' => Hash::make($validated['password']),
-            'role' => $validated['role']
-        ]);
-
-        return $this->apiSuccess($user, "User created successfully");
+            return $this->apiSuccess($user, "User created successfully", 201);
         } catch (\Exception $e) {
             return $this->apiError('Failed to create User');
         }
@@ -102,22 +101,43 @@ class UserController extends Controller
 
     public function login(Request $request)
     {
+        // Validate incoming request data
         $credentials = $request->validate([
             'username' => 'required|string',
             'password' => 'required|string',
+            'remember' => 'nullable|boolean', // Remember me checkbox
         ]);
 
+        // Check if user exists with the provided username
         $user = User::query()->where("username", $credentials['username'])->first();
 
-        if (!$user || !Hash::check($credentials['password'], $user['password'])) {
+        // If the user doesn't exist or password doesn't match, return error
+        if (!$user || !Hash::check($credentials['password'], $user->password)) {
             return $this->apiError("Wrong credentials", 401);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // Handle "remember me" functionality
+        $remember = $credentials['remember'] ?? false;
 
-        DB::table('personal_access_tokens')->where('tokenable_id', $user->user_id)->update(['last_used_at' => now()]);
+        // Use Auth::attempt to log the user in with or without remember me
+        if (Auth::attempt(['username' => $credentials['username'], 'password' => $credentials['password']], $remember)) {
+            // After successful login, create a new Sanctum token for the user
+            $token = $user->createToken('auth_token')->plainTextToken;
 
-        return $this->apiSuccess(['token' => $token, 'user' => $user], "Logged in successfully");
+            // Optionally, update the last_used_at field for the user's token in personal_access_tokens
+            DB::table('personal_access_tokens')
+                ->where('tokenable_id', $user->id) // Ensure using correct user ID field (might be `id`, not `user_id`)
+                ->update(['last_used_at' => now()]);
+
+            // Return the success response with the token and user data
+            return $this->apiSuccess([
+                'token' => $token,
+                'user' => $user,
+            ], "Logged in successfully");
+        }
+
+        // If login fails via session-based authentication, return error
+        return $this->apiError("Wrong credentials", 401);
     }
 
     public function logout(Request $request)

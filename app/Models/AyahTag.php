@@ -39,7 +39,6 @@ class AyahTag extends Model
 		'created_by' => 'int',
 		'updated_by' => 'int',
 		'approved_by' => 'int',
-		'approved_at' => 'datetime'
 	];
 
 	protected $fillable = [
