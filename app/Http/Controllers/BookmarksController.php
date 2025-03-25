@@ -15,8 +15,8 @@ class BookmarksController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100',
         ]);
 
-        $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 20);
+        $page = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 20);
 
         try {
             // Fetch all necessary bookmarks without grouping by surah_id
@@ -25,14 +25,14 @@ class BookmarksController extends Controller
                 ->join('ayahs', 'ayahs.id', '=', 'bookmarks.ayah_id')
                 ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
                 ->select(
-                    'bookmarks.id as bookmark_id',
                     'surahs.id as surah_id',
                     'surahs.name_ar as name_ar',
                     'surahs.name_en as name_en',
                     'ayahs.id as ayah_id', // Alias to avoid ambiguity
                     'ayahs.text as ayah_text',
                     'ayahs.number_in_surah as number_in_surah'
-                );
+                )
+                ->orderBy('ayah_id');
 
             $totalCount = $bookmarksQuery->count();
             $totalPages = ceil($totalCount / $perPage);
@@ -50,7 +50,6 @@ class BookmarksController extends Controller
                 $surahName = $bookmarksGroup->first()->name_en; // Or name_ar if you prefer
                 $formattedBookmarks[$surahName] = $bookmarksGroup->map(function ($item) {
                     return [
-                        'bookmark_id' => $item->bookmark_id,
                         'surah_id' => $item->surah_id,
                         'ayah_id' => $item->ayah_id,
                         'ayah_text' => $item->ayah_text,
@@ -67,7 +66,7 @@ class BookmarksController extends Controller
                     'page_size' => $perPage
                 ],
                 'result' => $formattedBookmarks
-            ], 'Bookmarks returned successfully');
+            ], 'Bookmarks retrieved successfully');
         } catch (\Exception $e) {
             return $this->apiError("Failed to retrieve Bookmarks: $e");
         }
