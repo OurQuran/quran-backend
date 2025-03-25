@@ -7,11 +7,9 @@
 namespace App\Models;
 
 use Carbon\Carbon;
-use Illuminate\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Model;
 use Laravel\Sanctum\HasApiTokens;
-
+use Illuminate\Foundation\Auth\User as Authenticatable;
 /**
  * Class User
  *
@@ -31,9 +29,9 @@ use Laravel\Sanctum\HasApiTokens;
  *
  * @package App\Models
  */
-class User extends Model
+class User extends Authenticatable
 {
-    use HasApiTokens, Authenticatable;
+    use HasApiTokens;
 
     protected $table = 'users';
 
