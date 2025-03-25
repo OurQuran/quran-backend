@@ -18,8 +18,8 @@ class TagController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
 
-        $page = $validated['page'] ?? 1;
-        $perPage = $validated['per_page'] ?? 10;
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 20);
 
         // Query only parent tags
         $query = Tag::query()
@@ -34,7 +34,8 @@ class TagController extends Controller
         }
 
         // Count total parent tags before pagination
-        $totalParents = $query->count();
+        $totalCount = $query->count();
+        $totalPages = ceil($totalCount / $perPage);
 
         // Paginate parent tags
         $tags = $query->skip(($page - 1) * $perPage)
@@ -42,8 +43,13 @@ class TagController extends Controller
             ->get();
 
         return $this->apiSuccess([
-            'count' => $totalParents, // Total count of parent tags
-            'tags' => $tags // Paginated tag results
+            'meta' => [
+                'total_count' => $totalCount,
+                'total_pages' => $totalPages,
+                'current_page' => $page,
+                'page_size' => $perPage
+            ],
+            'result' => $tags
         ], 'Tags retrieved successfully');
     }
 
@@ -173,8 +179,8 @@ class TagController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
 
-        $page = $validated['page'] ?? 1;
-        $perPage = $validated['per_page'] ?? 10;
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 20);
 
         // If 'name' or 'tag_id' is provided, filter the specific tag
         if (!empty($validated['name']) || !empty($validated['tag_id'])) {
@@ -199,27 +205,28 @@ class TagController extends Controller
                 return $this->apiError('No Ayahs are attached to this tag', 404);
             }
 
-            // Add tag_name to each ayah and hide the unnecessary fields
+            // Add tag_name to each ayah and hide unnecessary fields
             foreach ($ayahs as $ayah) {
                 $ayah->tag_name = $tag->name;
                 $ayah->makeHidden(['hizb_id', 'juz_id', 'sajda', 'ayah_template']);
-                $ayah->makeHidden('pivot');  // Ensures pivot data is hidden
+                $ayah->makeHidden('pivot'); // Hide pivot data
             }
 
             return $this->apiSuccess([
-                'count' => $ayahs->total(), // Total count from pagination object
-                'ayahs' => $ayahs->items() // Get the actual ayah items for the current page
+                'meta' => [
+                    'total_count' => $ayahs->total(),
+                    'total_pages' => $ayahs->lastPage(),
+                    'current_page' => $ayahs->currentPage(),
+                    'page_size' => $ayahs->perPage()
+                ],
+                'result' => $ayahs->items()
             ], 'Ayahs retrieved successfully');
         }
 
         // If no name or tag_id is provided, return ayahs with tag_name added
-        $tagsWithAyahs = Tag::with([
-            'ayahs' => function ($query) use ($page, $perPage) {
-                $query->select(['ayahs.id', 'ayahs.text', 'ayahs.number_in_surah', 'ayahs.surah_id', 'ayahs.page', 'ayahs.hizb_id', 'ayahs.juz_id', 'ayahs.sajda', 'ayahs.ayah_template'])
-                    ->paginate($perPage, ['*'], 'page', $page);
-            }
-        ]) // Ensures only tags that have ayahs are included
-        ->get();
+        $tagsWithAyahs = Tag::with(['ayahs' => function ($query) {
+            $query->select(['ayahs.id', 'ayahs.text', 'ayahs.number_in_surah', 'ayahs.surah_id', 'ayahs.page', 'ayahs.hizb_id', 'ayahs.juz_id', 'ayahs.sajda', 'ayahs.ayah_template']);
+        }])->get();
 
         // If no ayahs exist for any tag, return a message
         if ($tagsWithAyahs->isEmpty()) {
@@ -237,16 +244,28 @@ class TagController extends Controller
             foreach ($tag->ayahs as $ayah) {
                 $ayah->tag_name = $tag->name;
                 $ayah->makeHidden(['hizb_id', 'juz_id', 'sajda', 'ayah_template']);
-                $ayah->makeHidden('pivot');  // Ensures pivot data is hidden
+                $ayah->makeHidden('pivot'); // Hide pivot data
                 $ayahsWithTagName[] = $ayah;
             }
         }
 
+        // Calculate total pages
+        $totalPages = ceil($totalAyahsCount / $perPage);
+
+        // Apply pagination manually
+        $paginatedResult = array_slice($ayahsWithTagName, ($page - 1) * $perPage, $perPage);
+
         return $this->apiSuccess([
-            'count' => $totalAyahsCount, // Correct total count for all tags
-            'ayahs' => $ayahsWithTagName
+            'meta' => [
+                'total_count' => $totalAyahsCount,
+                'total_pages' => $totalPages,
+                'current_page' => $page,
+                'page_size' => $perPage
+            ],
+            'result' => $paginatedResult
         ], 'Ayahs retrieved successfully');
     }
+
 
     public function getUnapprovedTags(Request $request) {
         $validated = $request->validate([
@@ -254,18 +273,30 @@ class TagController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
 
-        $page = $validated['page'] ?? 1;
-        $perPage = $validated['per_page'] ?? 10;
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 20);
 
-        $unapprovedTags = AyahTag::query()
+        $unapprovedTagsQuery = AyahTag::query()
             ->where('approved_by', '=', null)
             ->orWhere('approved_at', '=', null)
-            ->orderBy('updated_at', 'desc')
-            ->skip(($page - 1) * $perPage)
+            ->orderBy('updated_at', 'desc');
+
+        $totalCount = $unapprovedTagsQuery->count();
+        $totalPages = ceil($totalCount / $perPage);
+
+        $unapprovedTags = $unapprovedTagsQuery->skip(($page - 1) * $perPage)
             ->take($perPage)
             ->get();
 
-        return $this->apiSuccess($unapprovedTags, 'Unapproved associated Tags with Ayahs retrieved successfully');
+        return $this->apiSuccess([
+            'meta' => [
+                'total_count' => $totalCount,
+                'total_pages' => $totalPages,
+                'current_page' => $page,
+                'page_size' => $perPage
+            ],
+            'result' => $unapprovedTags
+        ], 'Unapproved associated Tags with Ayahs retrieved successfully');
     }
 
     public function approve(Request $request){

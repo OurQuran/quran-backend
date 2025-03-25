@@ -15,12 +15,12 @@ class BookmarksController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100',
         ]);
 
-        $page = $validated['page'] ?? 1;
-        $perPage = $validated['per_page'] ?? 10;
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 20);
 
         try {
             // Fetch all necessary bookmarks without grouping by surah_id
-            $bookmarks = Bookmark::query()
+            $bookmarksQuery = Bookmark::query()
                 ->where("user_id", "=", Auth::id())
                 ->join('ayahs', 'ayahs.id', '=', 'bookmarks.ayah_id')
                 ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
@@ -32,17 +32,15 @@ class BookmarksController extends Controller
                     'ayahs.id as ayah_id', // Alias to avoid ambiguity
                     'ayahs.text as ayah_text',
                     'ayahs.number_in_surah as number_in_surah'
-                )
-                ->skip(($page - 1) * $perPage)
+                );
+
+            $totalCount = $bookmarksQuery->count();
+            $totalPages = ceil($totalCount / $perPage);
+
+            $bookmarks = $bookmarksQuery->skip(($page - 1) * $perPage)
                 ->take($perPage)
                 ->get();
 
-            // Check if there are any bookmarks
-            if ($bookmarks->isEmpty()) {
-                return $this->apiSuccess([], 'No bookmarks found');
-            }
-
-            // Group bookmarks by surah_id
             $groupedBookmarks = $bookmarks->groupBy('surah_id');
 
             // Prepare final response
@@ -62,8 +60,13 @@ class BookmarksController extends Controller
             }
 
             return $this->apiSuccess([
-                'count' => $bookmarks->count(),
-                'bookmarks' => $formattedBookmarks
+                'meta' => [
+                    'total_count' => $totalCount,
+                    'total_pages' => $totalPages,
+                    'current_page' => $page,
+                    'page_size' => $perPage
+                ],
+                'result' => $formattedBookmarks
             ], 'Bookmarks returned successfully');
         } catch (\Exception $e) {
             return $this->apiError("Failed to retrieve Bookmarks: $e");

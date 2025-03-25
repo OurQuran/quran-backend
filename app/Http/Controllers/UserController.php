@@ -14,13 +14,13 @@ class UserController extends Controller
     {
         $validated = $request->validate([
             'page' => 'sometimes|int|min:1',
-            'per_page' => 'sometimes|int|min:1',
+            'per_page' => 'sometimes|int|min:1|max:100',
             'name' => 'sometimes|string',
             'username' => 'sometimes|string',
         ]);
 
-        $page = $validated['page'] ?? 1;
-        $perPage = $validated['per_page'] ?? 20;
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 20);
 
         $query = User::query()->orderBy('id');
 
@@ -33,13 +33,22 @@ class UserController extends Controller
             $query->whereRaw('username ILIKE ?', ["%{$validated['username']}%"]);
         }
 
+        // Get total count before pagination
+        $totalCount = $query->count();
+        $totalPages = ceil($totalCount / $perPage);
+
+        // Paginate results
         $users = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
-        if ($users->isEmpty()) {
-            return $this->apiSuccess([], 'No users found');
-        }
-
-        return $this->apiSuccess($users, 'Users returned successfully');
+        return $this->apiSuccess([
+            'meta' => [
+                'total_count' => $totalCount,
+                'total_pages' => $totalPages,
+                'current_page' => $page,
+                'page_size' => $perPage
+            ],
+            'result' => $users
+        ], 'Users returned successfully');
     }
 
     public function store(Request $request)
