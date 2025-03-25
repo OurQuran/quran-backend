@@ -32,7 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($e->getStatusCode() == 404 && str_contains($message, 'App\Model') ){
                 [ $model, $id ] = extractModelAndIdFromNotFoundMessage($message);
                 $modelName = convertFromPascalCaseToNormalCase($model);
-                $message = "No $modelName found.";
+                $message = "No $modelName found";
             }
             return response()->json(array(
                 "success" => false,
