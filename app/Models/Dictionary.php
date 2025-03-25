@@ -41,7 +41,9 @@ class Dictionary extends Model
 		'meaning',
 		'lang',
 		'created_by',
-		'updated_by'
+		'updated_by',
+        'created_at',
+        'updated_at'
 	];
 
 	public function word()
