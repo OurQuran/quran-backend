@@ -48,7 +48,7 @@ class UserController extends Controller
                 'page_size' => $perPage
             ],
             'result' => $users
-        ], 'Users returned successfully');
+        ], 'Users retrieved successfully');
     }
 
     public function store(Request $request)
@@ -74,9 +74,9 @@ class UserController extends Controller
         }
     }
 
-    public function show(int $user)
+    public function show(int $id)
     {
-        $user = User::query()->findOrFail($user);
+        $user = User::query()->findOrFail($id);
 
         return $this->apiSuccess($user, 'User retrieved successfully');
     }

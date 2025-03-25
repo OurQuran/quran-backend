@@ -8,9 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use App\Models\Surah;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\PersonalAccessToken;
 
 class SurahController extends Controller
 {
@@ -76,7 +74,7 @@ class SurahController extends Controller
                 return $this->apiError('Invalid page number or no matching Ayahs', 404);
             }
 
-            return $this->apiSuccess($ayahs, 'Page returned successfully');
+            return $this->apiSuccess($ayahs, 'Page retrieved successfully');
         } catch (\Exception $e) {
             return $this->apiError('Failed to retrieve page', $e->getMessage());
         }
@@ -105,7 +103,7 @@ class SurahController extends Controller
                 return $this->apiError('Invalid Juz number or no matching Ayahs', 404);
             }
 
-            return $this->apiSuccess($ayahs, 'Juz returned successfully');
+            return $this->apiSuccess($ayahs, 'Juz retrieved successfully');
         } catch (\Exception $e) {
             return $this->apiError('Failed to retrieve Juz');
         }
@@ -135,7 +133,7 @@ class SurahController extends Controller
                 return $this->apiError('Invalid Surah number or no matching Ayahs', 404);
             }
 
-            return $this->apiSuccess($ayahs, 'Surah returned successfully');
+            return $this->apiSuccess($ayahs, 'Surah retrieved successfully');
         } catch (\Exception $e) {
             return $this->apiError('Failed to retrieve Surah');
         }
@@ -151,7 +149,7 @@ class SurahController extends Controller
                 ->orderBy('number_in_surah')
                 ->get();
 
-            return $this->apiSuccess($surah, 'Surah returned successfully');
+            return $this->apiSuccess($surah, 'Surah retrieved successfully');
         } catch (\Exception $e){
             return $this->apiError('Failed to retrieve Surah by Ayah');
         }
