@@ -6,8 +6,8 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('tags')->group(function () {
     Route::get('/', [TagController::class, 'index']);
     Route::post('/', [TagController::class, 'store'])->middleware('auth:sanctum');
-    Route::get('/ayahs', [TagController::class, 'getAyahsAssociatedWithTag']);
     Route::get('/unapproved', [TagController::class, 'getUnapprovedTags'])->middleware('auth:sanctum');
+    Route::get('/tags_search', [TagController::class, 'searchTags']);
     Route::get('/{id}', [TagController::class, 'show']);
     Route::put('/{id}', [TagController::class, 'update'])->middleware('auth:sanctum');
     Route::delete('/{id}', [TagController::class, 'destroy'])->middleware('auth:sanctum');

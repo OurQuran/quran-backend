@@ -76,7 +76,27 @@ class TagController extends Controller
 
     public function show(int $id)
     {
-        $tag = Tag::query()->with('allChildren')->findOrFail($id);
+        $tag = Tag::query()
+            ->with([
+                'allChildren' => function ($query) {
+                    $query->with('allChildren'); // Recursive loading for nested children
+                },
+                'ayahs' => function ($query) {
+                    $query->select('ayahs.id', 'ayahs.text', 'ayahs.number_in_surah');
+                }
+            ])
+            ->findOrFail($id);
+
+        // Hide the pivot field from the ayahs relationship
+        $tag->ayahs->makeHidden('pivot');
+
+        // Ensure ayahs is always an array for the main tag
+        if (!$tag->relationLoaded('ayahs') || $tag->ayahs->isEmpty()) {
+            $tag->setRelation('ayahs', collect([]));
+        }
+
+        // Recursively ensure ayahs is set for all children
+        $this->addEmptyAyahsToChildren($tag->allChildren);
 
         return $this->apiSuccess($tag, 'Tag retrieved successfully');
     }
@@ -171,102 +191,6 @@ class TagController extends Controller
         );
     }
 
-    public function getAyahsAssociatedWithTag(Request $request) {
-        $validated = $request->validate([
-            'name' => 'sometimes|string',
-            'tag_id' => 'sometimes|integer|exists:tags,id',
-            'page' => 'sometimes|integer|min:1',
-            'per_page' => 'sometimes|integer|min:1|max:100'
-        ]);
-
-        $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 20);
-
-        // If 'name' or 'tag_id' is provided, filter the specific tag
-        if (!empty($validated['name']) || !empty($validated['tag_id'])) {
-            $tagQuery = Tag::query();
-
-            if (!empty($validated['name'])) {
-                $tagQuery->whereRaw('name ILIKE ?', ["%{$validated['name']}%"]);
-            }
-
-            if (!empty($validated['tag_id'])) {
-                $tagQuery->where('id', $validated['tag_id']);
-            }
-
-            $tag = $tagQuery->firstOrFail();
-
-            // Retrieve ayahs related to the specific tag with pagination
-            $ayahs = $tag->ayahs()
-                ->select(['ayahs.id', 'ayahs.text', 'ayahs.number_in_surah', 'ayahs.surah_id', 'ayahs.page', 'ayahs.hizb_id', 'ayahs.juz_id', 'ayahs.sajda', 'ayahs.ayah_template'])
-                ->paginate($perPage, ['*'], 'page', $page);
-
-            if ($ayahs->isEmpty()) {
-                return $this->apiError('No Ayahs are attached to this tag', 404);
-            }
-
-            // Add tag_name to each ayah and hide unnecessary fields
-            foreach ($ayahs as $ayah) {
-                $ayah->tag_name = $tag->name;
-                $ayah->makeHidden(['hizb_id', 'juz_id', 'sajda', 'ayah_template']);
-                $ayah->makeHidden('pivot'); // Hide pivot data
-            }
-
-            return $this->apiSuccess([
-                'meta' => [
-                    'total_count' => $ayahs->total(),
-                    'total_pages' => $ayahs->lastPage(),
-                    'current_page' => $ayahs->currentPage(),
-                    'page_size' => $ayahs->perPage()
-                ],
-                'result' => $ayahs->items()
-            ], 'Ayahs retrieved successfully');
-        }
-
-        // If no name or tag_id is provided, return ayahs with tag_name added
-        $tagsWithAyahs = Tag::with(['ayahs' => function ($query) {
-            $query->select(['ayahs.id', 'ayahs.text', 'ayahs.number_in_surah', 'ayahs.surah_id', 'ayahs.page', 'ayahs.hizb_id', 'ayahs.juz_id', 'ayahs.sajda', 'ayahs.ayah_template']);
-        }])->get();
-
-        // If no ayahs exist for any tag, return a message
-        if ($tagsWithAyahs->isEmpty()) {
-            return $this->apiError('No Ayahs are attached to any tag', 404);
-        }
-
-        // Flatten the result, adding the tag_name to each ayah and hiding the unnecessary fields
-        $ayahsWithTagName = [];
-        $totalAyahsCount = 0;
-
-        foreach ($tagsWithAyahs as $tag) {
-            // Count the total ayahs for each tag before pagination
-            $totalAyahsCount += $tag->ayahs()->count();
-
-            foreach ($tag->ayahs as $ayah) {
-                $ayah->tag_name = $tag->name;
-                $ayah->makeHidden(['hizb_id', 'juz_id', 'sajda', 'ayah_template']);
-                $ayah->makeHidden('pivot'); // Hide pivot data
-                $ayahsWithTagName[] = $ayah;
-            }
-        }
-
-        // Calculate total pages
-        $totalPages = ceil($totalAyahsCount / $perPage);
-
-        // Apply pagination manually
-        $paginatedResult = array_slice($ayahsWithTagName, ($page - 1) * $perPage, $perPage);
-
-        return $this->apiSuccess([
-            'meta' => [
-                'total_count' => $totalAyahsCount,
-                'total_pages' => $totalPages,
-                'current_page' => $page,
-                'page_size' => $perPage
-            ],
-            'result' => $paginatedResult
-        ], 'Ayahs retrieved successfully');
-    }
-
-
     public function getUnapprovedTags(Request $request) {
         $validated = $request->validate([
             'page' => 'sometimes|integer|min:1',
@@ -335,5 +259,57 @@ class TagController extends Controller
         $ayahTag->save();
 
         return $this->apiSuccess($ayahTag, 'Tag unapproved successfully');
+    }
+
+    public function searchTags(Request $request){
+        $validated = $request->validate([
+            'name' => 'sometimes|required',
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100'
+        ]);
+
+        $page = (int) ($validated['page'] ?? 1);
+        $perPage = (int) ($validated['per_page'] ?? 20);
+
+        $query= Tag::query()
+            ->select('id','name')
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage);
+
+        if (!empty($validated['name'])) {
+            $query->whereRaw('name ILIKE ?', ["%{$validated['name']}%"]);
+        }
+
+        $totalCount = $query->count();
+        $totalPages = ceil($totalCount / $perPage);
+
+        $tags = $query->get();
+
+        return $this->apiSuccess([
+            'meta' => [
+                'total_count' => $totalCount,
+                'total_pages' => $totalPages,
+                'current_page' => $page,
+                'page_size' => $perPage
+            ],
+            'result' => $tags
+        ], 'Tags retrieved successfully');
+    }
+
+    /**
+     * Recursively set ayahs as an empty array for all children if not already set.
+     */
+    private function addEmptyAyahsToChildren($children)
+    {
+        foreach ($children as $child) {
+            if (!$child->relationLoaded('ayahs') || $child->ayahs->isEmpty()) {
+                $child->setRelation('ayahs', collect([]));
+            }
+
+            // Recursively apply to nested children
+            if ($child->relationLoaded('allChildren')) {
+                $this->addEmptyAyahsToChildren($child->allChildren);
+            }
+        }
     }
 }

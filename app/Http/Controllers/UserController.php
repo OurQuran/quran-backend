@@ -182,16 +182,10 @@ class UserController extends Controller
     {
         try {
             $validated = $request->validate([
-                'old_password' => 'required|string',
                 'new_password' => 'required|string|min:6|confirmed'
             ]);
 
             $user = User::query()->findOrFail($id);
-
-            // Check if the old password matches the current password
-            if (!Hash::check($validated['old_password'], $user->getAuthPassword())) {
-                return $this->apiError("Old password doesn't match current password");
-            }
 
             $newPassword = Hash::make($validated['new_password']);
 

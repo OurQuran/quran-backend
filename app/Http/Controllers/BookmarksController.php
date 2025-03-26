@@ -26,11 +26,11 @@ class BookmarksController extends Controller
                 ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
                 ->select(
                     'surahs.id as surah_id',
-                    'surahs.name_ar as name_ar',
-                    'surahs.name_en as name_en',
+                    'surahs.name_en as surah_name', // Include surah_name directly
                     'ayahs.id as ayah_id', // Alias to avoid ambiguity
                     'ayahs.text as ayah_text',
-                    'ayahs.number_in_surah as number_in_surah'
+                    'ayahs.number_in_surah as number_in_surah',
+                    'bookmarks.created_at as created_at',
                 )
                 ->orderBy('ayah_id');
 
@@ -41,22 +41,17 @@ class BookmarksController extends Controller
                 ->take($perPage)
                 ->get();
 
-            $groupedBookmarks = $bookmarks->groupBy('surah_id');
-
-            // Prepare final response
-            $formattedBookmarks = [];
-            foreach ($groupedBookmarks as $surahId => $bookmarksGroup) {
-                // Get the surah's name from the first item in the group
-                $surahName = $bookmarksGroup->first()->name_en; // Or name_ar if you prefer
-                $formattedBookmarks[$surahName] = $bookmarksGroup->map(function ($item) {
-                    return [
-                        'surah_id' => $item->surah_id,
-                        'ayah_id' => $item->ayah_id,
-                        'ayah_text' => $item->ayah_text,
-                        'number_in_surah' => $item->number_in_surah,
-                    ];
-                });
-            }
+            // Prepare final response as a flat array
+            $formattedBookmarks = $bookmarks->map(function ($item) {
+                return [
+                    'surah_id' => $item->surah_id,
+                    'surah_name' => $item->surah_name, // Flattened field for surah_name
+                    'ayah_id' => $item->ayah_id,
+                    'ayah_text' => $item->ayah_text,
+                    'number_in_surah' => $item->number_in_surah,
+                    'created_at' => $item->created_at,
+                ];
+            });
 
             return $this->apiSuccess([
                 'meta' => [
@@ -68,7 +63,7 @@ class BookmarksController extends Controller
                 'result' => $formattedBookmarks
             ], 'Bookmarks retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError("Failed to retrieve Bookmarks: $e");
+            return $this->apiError('Failed to retrieve Bookmarks');
         }
     }
 
@@ -92,7 +87,8 @@ class BookmarksController extends Controller
 
             $bookmark = Bookmark::create([
                 'ayah_id' => $ayahId,
-                'user_id' => $userId
+                'user_id' => $userId,
+                'created_at' => now(),
             ]);
 
             return $this->apiSuccess($bookmark, 'Bookmark created successfully.', 201);

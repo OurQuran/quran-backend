@@ -66,7 +66,8 @@ class Ayah extends Model
 	{
 		return $this->belongsToMany(Tag::class, 'ayah_tags')
 					->withPivot('id', 'notes', 'created_by', 'updated_by', 'approved_by', 'approved_at')
-					->withTimestamps();
+					->withTimestamps()
+                    ->without('pivot');
 	}
 
 	public function words()
