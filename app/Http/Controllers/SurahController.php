@@ -22,11 +22,21 @@ class SurahController extends Controller
                 'name' => 'sometimes|string',
             ]);
 
-            $query = Surah::query()->select('id', 'number', 'name_ar', 'name_en', 'name_en_translation', 'type');
+            $query = Surah::query()
+                ->join('ayahs', 'surahs.id', '=', 'ayahs.surah_id')
+                ->select(
+                    'surahs.id',
+                    'surahs.number', // Explicitly reference surahs.number
+                    'surahs.name_ar',
+                    'surahs.name_en',
+                    'surahs.name_en_translation',
+                    'surahs.type',
+                    'ayahs.juz_id'
+                );
 
             // If 'surah' is provided, return only that Surah
             if (!empty($validated['surah'])) {
-                $surah = $query->where('id', $validated['surah'])->firstOrFail();
+                $surah = $query->where('surahs.id', $validated['surah'])->firstOrFail();
 
                 return $this->apiSuccess($surah, 'Surah retrieved successfully');
             }
@@ -44,11 +54,11 @@ class SurahController extends Controller
                     ->orWhere('name_en_translation', 'ILIKE', "%{$validated['name']}%");
             }
 
-            $surahs = $query->orderBy('id')->get();
+            $surahs = $query->orderBy('surahs.id')->get();
 
             return $this->apiSuccess($surahs, 'Surahs retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError('Failed to retrieve Surahs');
+            return $this->apiError("Failed to retrieve Surahs $e");
         }
     }
 
@@ -56,7 +66,7 @@ class SurahController extends Controller
     {
         try {
             $validated = $request->validate([
-                'verse' => 'sometimes|int|min:1',
+                'verse' => 'sometimes|integer|min:1',
                 'edition' => 'sometimes|integer|min:1|exists:editions,id|nullable'
             ]);
 
@@ -74,7 +84,26 @@ class SurahController extends Controller
                 return $this->apiError('Invalid page number or no matching Ayahs', 404);
             }
 
-            return $this->apiSuccess($ayahs, 'Page retrieved successfully');
+            // Retrieve the bismillah row (with id = 1)
+            $bismillahRow = Ayah::find(1);
+            if (!$bismillahRow) {
+                return $this->apiError('Bismillah row not found', 404);
+            }
+
+            // Process the ayahs collection: before each ayah with number_in_surah == 1 (and surah_id != 9),
+            // insert a cloned bismillah row.
+            $modifiedAyahs = collect();
+            foreach ($ayahs as $ayah) {
+                if ($ayah->number_in_surah == 1 && $ayah->surah_id != 1 && $ayah->surah_id != 9) {
+                    $bismillahRow->surah_id = $ayah->surah_id;
+                    $bismillahRow->number_in_surah = 1;
+
+                    $modifiedAyahs->push($bismillahRow);
+                }
+                $modifiedAyahs->push($ayah);
+            }
+
+            return $this->apiSuccess($modifiedAyahs, 'Page retrieved successfully');
         } catch (\Exception $e) {
             return $this->apiError('Failed to retrieve page', $e->getMessage());
         }
@@ -85,7 +114,7 @@ class SurahController extends Controller
     {
         try {
             $validated = $request->validate([
-                'verse' => 'sometimes|int|min:1',
+                'verse' => 'sometimes|integer|min:1',
                 'edition' => 'sometimes|integer|min:1|exists:editions,id|nullable'
             ]);
 
@@ -97,15 +126,35 @@ class SurahController extends Controller
                 ->orderBy('number_in_surah');
 
             // Filter by verse if provided
-            $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery); // Execute query
+            $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery);
 
             if ($ayahs->isEmpty()) {
                 return $this->apiError('Invalid Juz number or no matching Ayahs', 404);
             }
 
-            return $this->apiSuccess($ayahs, 'Juz retrieved successfully');
+            // Retrieve the bismillah row (with id = 1)
+            $bismillahRow = Ayah::query()->where('ayahs.id',1);
+            $bismillahRow = $this->filterByVerseAndEdition($validated, $bismillahRow)->first();
+
+            // Process the ayahs collection to insert bismillah before the first ayah of each new surah (except surah 9)
+            $modifiedAyahs = collect();
+            $currentSurah = $ayahs[0]->surah_id;
+            foreach ($ayahs as $ayah) {
+                if ($ayah->surah_id !== $currentSurah) {
+                    $currentSurah = $ayah->surah_id;
+                    if ($currentSurah != 9) {
+                        $bismillahRow->surah_id = $currentSurah;
+                        $bismillahRow->number_in_surah = 1;
+
+                        $modifiedAyahs->push($bismillahRow);
+                    }
+                }
+                $modifiedAyahs->push($ayah);
+            }
+
+            return $this->apiSuccess($modifiedAyahs, 'Juz retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError('Failed to retrieve Juz');
+            return $this->apiError("Failed to retrieve Juz $e");
         }
     }
 
@@ -119,12 +168,25 @@ class SurahController extends Controller
                 'edition' => 'sometimes|integer|min:1|exists:editions,id|nullable'
             ]);
 
-            // Base query for Ayahs
-            $ayahsQuery = Ayah::query()
-                ->where('surah_id', $surah)
-                ->orderBy('juz_id')
-                ->orderBy('page')
-                ->orderBy('number_in_surah');
+            $ayahsQuery = Ayah::query();
+
+            if ($surah !== 9){
+                $ayahsQuery
+                    ->where('ayahs.surah_id', $surah)
+                    ->orWhere(function ($query) {
+                        $query->where('ayahs.id', 1);  // Explicitly reference ayahs.id
+                    })
+                    ->orderBy('ayahs.juz_id')
+                    ->orderBy('ayahs.page')
+                    ->orderBy('ayahs.number_in_surah');
+            } else {
+                $ayahsQuery
+                    ->where('surah_id', $surah)
+                    ->orderBy('juz_id')
+                    ->orderBy('page')
+                    ->orderBy('number_in_surah');
+            }
+
 
             // Filter by verse if provided
             $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery); // Execute query
@@ -135,7 +197,7 @@ class SurahController extends Controller
 
             return $this->apiSuccess($ayahs, 'Surah retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError('Failed to retrieve Surah');
+            return $this->apiError("Failed to retrieve Surah $e");
         }
     }
 
@@ -164,7 +226,6 @@ class SurahController extends Controller
             return $this->apiError('Failed to retrieve editions');
         }
     }
-
 
     private function filterByVerseAndEdition(array $validated, Builder $ayahsQuery): Collection
     {
@@ -214,5 +275,4 @@ class SurahController extends Controller
         // Execute the query and return the result as a collection
         return $ayahsQuery->get();
     }
-
 }
