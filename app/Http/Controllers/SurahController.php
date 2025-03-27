@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\SurahRequest;
 use App\Models\Ayah;
 use App\Models\Edition;
 use Illuminate\Database\Eloquent\Builder;
@@ -67,13 +68,10 @@ class SurahController extends Controller
         }
     }
 
-    public function getByPage(Request $request, int $page)
+    public function getByPage(SurahRequest $request, int $page)
     {
         try {
-            $validated = $request->validate([
-                'verse' => 'sometimes|integer|min:1',
-                'edition' => 'sometimes|integer|min:1|exists:editions,id|nullable'
-            ]);
+            $validated = $request->validatedWithDefaults();
 
             // Base query for Ayahs
             $ayahsQuery = Ayah::query()
@@ -82,14 +80,14 @@ class SurahController extends Controller
                 ->orderBy('page')
                 ->orderBy('number_in_surah');
 
-            // Filter by verse if provided
+            // Filter by verse and apply default edition logic
             $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery);
 
             if ($ayahs->isEmpty()) {
                 return $this->apiError('Invalid page number or no matching Ayahs', 404);
             }
 
-            // Retrieve the bismillah row (with id = 1)
+            // Retrieve the Bismillah row (id = 1)
             $bismillahQuery = Ayah::query()->where('ayahs.id', 1);
             $bismillahRow = $this->filterByVerseAndEdition($validated, $bismillahQuery)->first();
 
@@ -116,13 +114,10 @@ class SurahController extends Controller
         }
     }
 
-    public function getByJuz(Request $request, int $juz)
+    public function getByJuz(SurahRequest $request, int $juz)
     {
         try {
-            $validated = $request->validate([
-                'verse' => 'sometimes|integer|min:1',
-                'edition' => 'sometimes|integer|min:1|exists:editions,id|nullable'
-            ]);
+            $validated = $request->validatedWithDefaults();
 
             // Base query for Ayahs
             $ayahsQuery = Ayah::query()
@@ -131,14 +126,14 @@ class SurahController extends Controller
                 ->orderBy('juz_id')
                 ->orderBy('number_in_surah');
 
-            // Filter by verse if provided
+            // Filter by verse and apply edition logic
             $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery);
 
             if ($ayahs->isEmpty()) {
                 return $this->apiError('Invalid Juz number or no matching Ayahs', 404);
             }
 
-            // Retrieve the Bismillah row (with id = 1)
+            // Retrieve the Bismillah row (id = 1)
             $bismillahQuery = Ayah::query()->where('ayahs.id', 1);
             $bismillahRow = $this->filterByVerseAndEdition($validated, $bismillahQuery)->first();
 
@@ -166,19 +161,14 @@ class SurahController extends Controller
 
             return $this->apiSuccess($modifiedAyahs, 'Juz retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError("Failed to retrieve Juz $e");
+            return $this->apiError("Failed to retrieve Juz", $e->getMessage());
         }
     }
 
-    // ?verse
-    // ?edition
-    public function getBySurah(Request $request, int $surah)
+    public function getBySurah(SurahRequest $request, int $surah)
     {
         try {
-            $validated = $request->validate([
-                'verse' => 'sometimes|int|min:1',
-                'edition' => 'sometimes|integer|min:1|exists:editions,id|nullable'
-            ]);
+            $validated = $request->validatedWithDefaults();
 
             $ayahsQuery = Ayah::query();
 
@@ -199,7 +189,7 @@ class SurahController extends Controller
                     ->orderBy('number_in_surah');
             }
 
-            // Filter by verse if provided
+            // Filter by verse and apply edition logic
             $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery);
 
             if ($ayahs->isEmpty()) {
@@ -213,7 +203,7 @@ class SurahController extends Controller
 
             return $this->apiSuccess($ayahs, 'Surah retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError("Failed to retrieve Surah $e");
+            return $this->apiError("Failed to retrieve Surah", $e->getMessage());
         }
     }
 
@@ -245,33 +235,32 @@ class SurahController extends Controller
 
     private function filterByVerseAndEdition(array $validated, Builder $ayahsQuery): Collection
     {
+        // Ensure default editions are applied
+        $textEdition = $validated['text_edition'] ?? 1;
+        $audioEdition = $validated['audio_edition'] ?? 110;
+
         // If a specific verse is provided, apply the filter
         if (!empty($validated['verse']) && $validated['verse'] !== 0) {
             $ayahsQuery->where('number_in_surah', $validated['verse']);
         }
 
-        // If an edition is provided, join ayah_edition to get translations
-        if (!empty($validated['edition']) && $validated['edition'] !== 0) {
-            $editionId = $validated['edition'];
-
-            $ayahsQuery->leftJoin('ayah_edition as ae', function ($join) use ($editionId) {
-                $join->on('ayahs.id', '=', 'ae.ayah_id')
-                    ->where('ae.edition_id', '=', $editionId);
+        // Join ayah_edition to fetch translations and audio
+        $ayahsQuery
+            ->leftJoin('ayah_edition as text_ae', function ($join) use ($textEdition) {
+                $join->on('ayahs.id', '=', 'text_ae.ayah_id')
+                    ->where('text_ae.edition_id', '=', $textEdition);
             })
-                ->leftJoin('editions as e', 'e.id', '=', 'ae.edition_id')
-                ->select([
-                    'ayahs.*', // Select all columns from ayahs table
-                    DB::raw("CASE
-                WHEN ayahs.number_in_surah = 0 THEN
-                    (SELECT ae1.data FROM ayah_edition ae1
-                     WHERE ae1.ayah_id = 1 AND ae1.edition_id = $editionId
-                     LIMIT 1)
-                ELSE ae.data
-            END AS translation") // Select translation based on edition
-                ]);
-        } else {
-            $ayahsQuery->select('ayahs.*'); // Default selection when no edition is provided
-        }
+            ->leftJoin('ayah_edition as audio_ae', function ($join) use ($audioEdition) {
+                $join->on('ayahs.id', '=', 'audio_ae.ayah_id')
+                    ->where('audio_ae.edition_id', '=', $audioEdition);
+            })
+            ->leftJoin('editions as text_ed', 'text_ed.id', '=', 'text_ae.edition_id')
+            ->leftJoin('editions as audio_ed', 'audio_ed.id', '=', 'audio_ae.edition_id')
+            ->select([
+                'ayahs.*',
+                DB::raw("COALESCE(text_ae.data, (SELECT ae1.data FROM ayah_edition ae1 WHERE ae1.ayah_id = 1 AND ae1.edition_id = $textEdition LIMIT 1)) AS translation"),
+                DB::raw("COALESCE(audio_ae.data, (SELECT ae2.data FROM ayah_edition ae2 WHERE ae2.ayah_id = 1 AND ae2.edition_id = $audioEdition LIMIT 1)) AS audio")
+            ]);
 
         // Manually check for authenticated user
         $user = $this->checkLoginToken();
@@ -280,14 +269,13 @@ class SurahController extends Controller
         if ($user) {
             $ayahsQuery->leftJoin('bookmarks as bookmarks', 'bookmarks.ayah_id', '=', 'ayahs.id')
                 ->addSelect([
-                    DB::raw("CASE WHEN bookmarks.ayah_id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked") // Compute 'bookmarked' field
+                    DB::raw("CASE WHEN bookmarks.ayah_id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked")
                 ]);
         } else {
             // If no authenticated user, just add a 'bookmarked' field with false (to prevent errors)
             $ayahsQuery->addSelect([DB::raw('FALSE AS bookmarked')]);
         }
 
-        // Execute the query and return the result as a collection
         return $ayahsQuery->get();
     }
 }
