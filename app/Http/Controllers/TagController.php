@@ -23,7 +23,6 @@ class TagController extends Controller
 
         // Query only parent tags
         $query = Tag::query()
-            ->whereNull('parent_id')
             ->with('allChildren') // Load children
             ->orderBy('name')
             ->orderBy('id');
@@ -31,6 +30,8 @@ class TagController extends Controller
         // Filter by name (case-insensitive)
         if (!empty($validated['name'])) {
             $query->whereRaw('name ILIKE ?', ["%{$validated['name']}%"]);
+        } else {
+            $query->whereNull('parent_id');
         }
 
         // Count total parent tags before pagination

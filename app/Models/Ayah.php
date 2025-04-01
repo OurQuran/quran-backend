@@ -6,7 +6,6 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 
@@ -22,8 +21,6 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $hizb_id
  * @property int $juz_id
  * @property int $sajda
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
  * @property string|null $ayah_template
  *
  * @property Surah $surah
@@ -37,6 +34,8 @@ class Ayah extends Model
 {
 	protected $table = 'ayahs';
 
+    public $timestamps = false; // Disable automatic timestamps
+
 	protected $casts = [
         'id' => 'int',
 		'number' => 'int',
@@ -48,13 +47,9 @@ class Ayah extends Model
 		'sajda' => 'int'
 	];
 
-    protected $hidden = [
-        'created_at',
-        'updated_at'
-    ];
-
 	protected $fillable = [
-		'ayah_template'
+		'ayah_template',
+        'pure_text'
 	];
 
 	public function surah()

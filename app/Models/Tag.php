@@ -74,4 +74,9 @@ class Tag extends Model
     {
         return $this->children()->with('allChildren'); // Recursive Relationship
     }
+
+    public function parent()
+    {
+        return $this->belongsTo(Tag::class, 'parent_id');
+    }
 }
