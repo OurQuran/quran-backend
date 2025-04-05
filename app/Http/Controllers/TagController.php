@@ -80,23 +80,25 @@ class TagController extends Controller
         $tag = Tag::query()
             ->with([
                 'allChildren' => function ($query) {
-                    $query->with('allChildren'); // Recursive loading for nested children
+                    $query->with('allChildren');
                 },
-                'ayahs' => function ($query) {
-                    $query->select('ayahs.id', 'ayahs.text', 'ayahs.number_in_surah');
+                'ayahs.tags' => function ($query) {
+                    $query->select('tags.id', 'tags.name');
                 }
             ])
             ->findOrFail($id);
 
-        // Hide the pivot field from the ayahs relationship
-        $tag->ayahs->makeHidden('pivot');
+        // Hide pivot on ayahs and their tags
+        $tag->ayahs->each(function ($ayah) {
+            $ayah->makeHidden('pivot'); // 👈 hides pivot on the ayah itself
+            $ayah->tags = $ayah->tags->makeHidden('pivot'); // hide pivot on related tags
+        });
 
-        // Ensure ayahs is always an array for the main tag
         if (!$tag->relationLoaded('ayahs') || $tag->ayahs->isEmpty()) {
             $tag->setRelation('ayahs', collect([]));
         }
 
-        // Recursively ensure ayahs is set for all children
+        // Recursively ensure children have ayahs set and pivot hidden
         $this->addEmptyAyahsToChildren($tag->allChildren);
 
         return $this->apiSuccess($tag, 'Tag retrieved successfully');

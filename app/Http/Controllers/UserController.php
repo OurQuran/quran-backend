@@ -68,7 +68,14 @@ class UserController extends Controller
                 'role' => $validated['role']
             ]);
 
-            return $this->apiSuccess($user, "User created successfully", 201);
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            // Optionally, update the last_used_at field for the user's token in personal_access_tokens
+            DB::table('personal_access_tokens')
+                ->where('tokenable_id', $user->id) // Ensure using correct user ID field (might be `id`, not `user_id`)
+                ->update(['last_used_at' => now()]);
+
+            return $this->apiSuccess(['token' => $token, 'user' => $user], "User created successfully", 201);
         } catch (\Exception $e) {
             return $this->apiError('Failed to create User');
         }

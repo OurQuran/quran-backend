@@ -18,7 +18,14 @@ class SurahController extends Controller
         try {
             $validated = $request->validate([
                 'surah' => 'sometimes|int',
-                'type' => 'sometimes|in:Meccan,Medinan',
+                'type' => [
+                    'sometimes',
+                    function ($attribute, $value, $fail) {
+                        if (!in_array(strtolower($value), ['meccan', 'medinan', ''])) {
+                            $fail("The $attribute must be either 'meccan' or 'medinan'.");
+                        }
+                    }
+                ],
                 'revelation_order' => 'sometimes|in:asc,desc',
                 'name' => 'sometimes|string',
             ]);
@@ -46,8 +53,8 @@ class SurahController extends Controller
             }
 
             // Apply optional filters
-            if (!empty($validated['type'])) {
-                $query->where('surahs.type', $validated['type']);
+            if (!empty($validated['type']) && $validated['type'] !== '') {
+                $query->where('surahs.type', 'ILIKE', "%{$validated['type']}%");
             }
             if (!empty($validated['revelation_order'])) {
                 $query->orderBy('surahs.number', $validated['revelation_order']);
@@ -96,7 +103,7 @@ class SurahController extends Controller
             foreach ($ayahs as $ayah) {
                 if ($ayah->number_in_surah == 1 && $ayah->surah_id != 1 && $ayah->surah_id != 9) {
                     $bismillahRow->surah_id = $ayah->surah_id;
-                    $bismillahRow->number_in_surah = 1;
+                    $bismillahRow->number_in_surah = 0;
 
                     // Fetch and attach tags for Bismillah row
                     $bismillahRow->tags = $bismillahRow->tags()->select('tags.id', 'tags.name')->get();
@@ -146,7 +153,7 @@ class SurahController extends Controller
                     $currentSurah = $ayah->surah_id;
                     if ($currentSurah != 9) {
                         $bismillahRow->surah_id = $currentSurah;
-                        $bismillahRow->number_in_surah = 1;
+                        $bismillahRow->number_in_surah = 0;
 
                         // Fetch and attach tags for Bismillah row (Hides pivot)
                         $bismillahRow->tags = $bismillahRow->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
