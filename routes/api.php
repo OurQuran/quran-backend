@@ -8,6 +8,7 @@ foreach (glob(__DIR__ . '/subroutes/*.php') as $routeFile) {
     require $routeFile;
 }
 
+Route::post('/signup', [UserController::class, 'signup']);
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/logout', [UserController::class, 'logout'])->middleware('auth:sanctum');
 Route::get('/me', [UserController::class, 'me'])->middleware('auth:sanctum');

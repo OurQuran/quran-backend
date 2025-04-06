@@ -15,7 +15,8 @@ class TagController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|string',
             'page' => 'sometimes|integer|min:1',
-            'per_page' => 'sometimes|integer|min:1|max:100'
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'user_id' => 'sometimes|integer|min:1|exists:users,id'
         ]);
 
         $page = (int) ($validated['page'] ?? 1);
@@ -32,6 +33,15 @@ class TagController extends Controller
             $query->whereRaw('name ILIKE ?', ["%{$validated['name']}%"]);
         } else {
             $query->whereNull('parent_id');
+        }
+
+        $user = $this->checkLoginToken();
+
+        if (!empty($validated['user_id'])) {
+            if ($validated['user_id'] == $user->id || $user->role == 'superadmin' || $user->role == 'admin')
+                $query->whereRaw('created_by = ?', ["{$validated['user_id']}"]);
+            else
+                return $this->apiError('You do not have the permission to view this', 403);
         }
 
         // Count total parent tags before pagination

@@ -42,9 +42,10 @@ class Tag extends Model
         'updated_by'
 	];
 
+    // TODO: created_by shouldn't be hidden, no?
     protected $hidden = [
-      'created_by',
-      'updated_by',
+      // 'created_by',
+      // 'updated_by',
       'created_at',
       'updated_at'
     ];

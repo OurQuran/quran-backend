@@ -19,8 +19,8 @@ class UserController extends Controller
             'username' => 'sometimes|string',
         ]);
 
-        $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 20);
+        $page = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 20);
 
         $query = User::query()->orderBy('id');
 
@@ -53,32 +53,21 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
-        try {
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'username' => 'required|string|max:255|unique:users',
-                'password' => 'required|string|min:6',
-                'role' => 'required|string|in:user,admin'
-            ]);
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'username' => 'required|string|max:255|unique:users',
+            'password' => 'required|string|min:6',
+            'role' => 'required|string|in:user,admin'
+        ]);
 
-            $user = User::create([
-                'name' => $validated['name'],
-                'username' => $validated['username'],
-                'password' => Hash::make($validated['password']),
-                'role' => $validated['role']
-            ]);
+        $user = User::create([
+            'name' => $validated['name'],
+            'username' => $validated['username'],
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role']
+        ]);
 
-            $token = $user->createToken('auth_token')->plainTextToken;
-
-            // Optionally, update the last_used_at field for the user's token in personal_access_tokens
-            DB::table('personal_access_tokens')
-                ->where('tokenable_id', $user->id) // Ensure using correct user ID field (might be `id`, not `user_id`)
-                ->update(['last_used_at' => now()]);
-
-            return $this->apiSuccess(['token' => $token, 'user' => $user], "User created successfully", 201);
-        } catch (\Exception $e) {
-            return $this->apiError('Failed to create User');
-        }
+        return $this->apiSuccess($user, "User created successfully", 201);
     }
 
     public function show(int $id)
@@ -156,10 +145,56 @@ class UserController extends Controller
         return $this->apiError("Wrong credentials", 401);
     }
 
+    public function signup(Request $request)
+    {
+        $user = $this->checkLoginToken();
+
+        if ($user) {
+            return $this->apiError("You must logout in order to signup");
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'username' => 'required|string|max:255|unique:users',
+            'password' => 'required|string|min:6',
+            'role' => 'required|string|in:user'
+        ]);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'username' => $validated['username'],
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role']
+        ]);
+
+        if (Auth::attempt(['username' => $user['username'], 'password' => $user['password']], true)) {
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            DB::table('personal_access_tokens')
+                ->where('tokenable_id', $user->id) // Ensure using correct user ID field (might be `id`, not `user_id`)
+                ->update(['last_used_at' => now()]);
+
+            return $this->apiSuccess(['token' => $token, 'user' => $user], "User created successfully", 201);
+        }
+
+        return $this->apiError("Wrong credentials", 401);
+    }
+
     public function logout(Request $request)
     {
         $request->user()->tokens()->delete();
         return $this->apiSuccess(null, "Logged out successfully");
+    }
+
+    public function deleteAccount()
+    {
+        User::query()
+            ->where('id', Auth::id())
+            ->whereNot('role', 'superadmin')
+            ->firstOrFail()
+            ->delete();
+
+        return $this->apiSuccess(null, "Account deleted successfully");
     }
 
     public function changeOwnPassword(Request $request)
