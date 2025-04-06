@@ -309,6 +309,39 @@ class TagController extends Controller
         ], 'Tags retrieved successfully');
     }
 
+    public function scrape(Request $request)
+    {
+        $validated = $request->validate([
+            'surah_id' => 'required|integer|exists:surahs,id',
+            'verse' => 'required|integer|min:1',
+            'tag_name' => 'required|string'
+        ]);
+
+        // 1. Find the Ayah
+        $ayah = Ayah::where('surah_id', $validated['surah_id'])
+            ->where('number_in_surah', $validated['verse'])
+            ->firstOrFail();
+
+        // 2. Find or create the Tag
+        $tag = Tag::firstOrCreate(['name' => $validated['tag_name']]);
+
+        // 3. Check if the tag is already attached to the ayah
+        $alreadyAttached = $ayah->tags()->where('tags.id', $tag->id)->exists();
+
+        if ($alreadyAttached) {
+            return $this->apiError("Tag '{$tag->name}' is already attached to this ayah.", 409);
+        }
+
+        // 4. Attach the tag
+        $ayah->tags()->attach($tag->id);
+
+        return $this->apiSuccess([
+            'ayah_id' => $ayah->id,
+            'tag_id' => $tag->id,
+            'tag_name' => $tag->name
+        ], 'Tag attached successfully.');
+    }
+
     /**
      * Recursively set ayahs as an empty array for all children if not already set.
      */

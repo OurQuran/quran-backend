@@ -12,7 +12,7 @@ class GenerateWordHTML extends Command
 
     public function handle()
     {
-        $words = DB::table('words')->orderBy('id')->get();
+        $words = DB::table('words')->orderBy('ayah_id')->orderBy('id')->get();
 
         foreach ($words as $word) {
             $wordText = trim($word->word);
