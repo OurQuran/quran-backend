@@ -177,42 +177,50 @@ class SurahController extends Controller
         try {
             $validated = $request->validatedWithDefaults();
 
-            $ayahsQuery = Ayah::query();
+            // 1. Base query
+            $ayahsQuery = Ayah::query()
+                ->where('ayahs.surah_id', $surah)
+                ->orderBy('ayahs.juz_id')
+                ->orderBy('ayahs.page')
+                ->orderBy('ayahs.number_in_surah');
 
-            if ($surah !== 9) {
-                $ayahsQuery
-                    ->where('ayahs.surah_id', $surah)
-                    ->orWhere(function ($query) {
-                        $query->where('ayahs.id', 1); // Explicitly reference ayahs.id
-                    })
-                    ->orderBy('ayahs.juz_id')
-                    ->orderBy('ayahs.page')
-                    ->orderBy('ayahs.number_in_surah');
-            } else {
-                $ayahsQuery
-                    ->where('surah_id', $surah)
-                    ->orderBy('juz_id')
-                    ->orderBy('page')
-                    ->orderBy('number_in_surah');
-            }
-
-            // Filter by verse and apply edition logic
+            // 2. Apply filters and editions
             $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery);
 
             if ($ayahs->isEmpty()) {
                 return $this->apiError('Invalid Surah number or no matching Ayahs', 404);
             }
 
-            // Remove the pivot field from tags
-            foreach ($ayahs as $ayah) {
-                $ayah->tags = $ayah->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
+            // 3. Fetch and prepare Bismillah if needed
+            $modifiedAyahs = collect();
+
+            if ($surah !== 1 && $surah !== 9) {
+                $bismillahQuery = Ayah::query()->where('ayahs.id', 1);
+                $bismillahRow = $this->filterByVerseAndEdition($validated, $bismillahQuery)->first();
+
+                if ($bismillahRow) {
+                    $bismillahRow->surah_id = $surah;
+                    $bismillahRow->number_in_surah = 0;
+
+                    // Attach tags and hide pivot
+                    $bismillahRow->tags = $bismillahRow->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
+
+                    $modifiedAyahs->push($bismillahRow);
+                }
             }
 
-            return $this->apiSuccess($ayahs, 'Surah retrieved successfully');
+            // 4. Attach tags to each Ayah and add to final list
+            foreach ($ayahs as $ayah) {
+                $ayah->tags = $ayah->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
+                $modifiedAyahs->push($ayah);
+            }
+
+            return $this->apiSuccess($modifiedAyahs, 'Surah retrieved successfully');
         } catch (\Exception $e) {
             return $this->apiError("Failed to retrieve Surah", $e->getMessage());
         }
     }
+
 
     // ayah-surah/1 (for bookmarks)
     public function getSurahByAyah(Request $request, int $ayah){
