@@ -26,7 +26,14 @@ class SurahController extends Controller
                         }
                     }
                 ],
-                'revelation_order' => 'sometimes|in:asc,desc',
+                'revelation_order' => [
+                    'sometimes',
+                    function ($attribute, $value, $fail) {
+                        if (!in_array(strtolower($value), ['asc', 'desc', ''])) {
+                            $fail("The $attribute must be either 'asc' or 'desc'.");
+                        }
+                    }
+                ],
                 'name' => 'sometimes|string',
             ]);
 
@@ -56,7 +63,7 @@ class SurahController extends Controller
             if (!empty($validated['type']) && $validated['type'] !== '') {
                 $query->where('surahs.type', 'ILIKE', "%{$validated['type']}%");
             }
-            if (!empty($validated['revelation_order'])) {
+            if (!empty($validated['revelation_order']) && $validated['revelation_order'] !== '') {
                 $query->orderBy('surahs.number', $validated['revelation_order']);
             }
             if (!empty($validated['name'])) {
