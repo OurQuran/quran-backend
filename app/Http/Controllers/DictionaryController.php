@@ -10,9 +10,9 @@ class DictionaryController extends Controller
     public function index(Request $request)
     {
         $validated = $request->validate([
-            'word_id' => 'sometimes|integer|exists:words,id',
-            'word' => 'sometimes|string|exists:words,word',
-            'lang' => 'sometimes|string|max:10',
+            'word_id' => 'sometimes|nullable|integer|exists:words,id',
+            'word' => 'sometimes|nullable|string|exists:words,word',
+            'lang' => 'sometimes|nullable|string|max:10',
             'page' => 'sometimes|integer|min:1',
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);

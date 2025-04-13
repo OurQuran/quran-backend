@@ -15,8 +15,8 @@ class UserController extends Controller
         $validated = $request->validate([
             'page' => 'sometimes|int|min:1',
             'per_page' => 'sometimes|int|min:1|max:100',
-            'name' => 'sometimes|string',
-            'username' => 'sometimes|string',
+            'name' => 'sometimes|nullable|string',
+            'username' => 'sometimes|nullable|string',
         ]);
 
         $page = (int)($validated['page'] ?? 1);

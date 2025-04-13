@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Helpers.php';
 
 use App\Http\Middleware\AcceptJsonHeader;
+use App\Http\Middleware\ConvertEmptyStringsToNullInQuery;
 use App\Http\Middleware\CorsMiddleware;
 use App\Http\Middleware\HasRole;
 use Illuminate\Foundation\Application;
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->append(CorsMiddleware::class);
+        $middleware->prepend(ConvertEmptyStringsToNullInQuery::class);
         $middleware->prepend(AcceptJsonHeader::class);
         $middleware->alias([
             'role' => HasRole::class,

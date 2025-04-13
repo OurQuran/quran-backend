@@ -13,10 +13,10 @@ class TagController extends Controller
     public function index(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'sometimes|string',
+            'name' => 'sometimes|nullable|string',
             'page' => 'sometimes|integer|min:1',
             'per_page' => 'sometimes|integer|min:1|max:100',
-            'user_id' => 'sometimes|integer|min:1|exists:users,id'
+            'user_id' => 'sometimes|nullable|integer|min:1|exists:users,id'
         ]);
 
         $page = (int) ($validated['page'] ?? 1);
@@ -114,8 +114,8 @@ class TagController extends Controller
     public function update(Request $request, Tag $tag)
     {
         $validated = $request->validate([
-            'parent_id' => 'sometimes|int|exists:tags,id',
-            'name' => 'sometimes|string|unique:tags,name',
+            'parent_id' => 'sometimes|nullable|int|exists:tags,id',
+            'name' => 'sometimes|nullable|string|unique:tags,name',
         ]);
 
         $tag->update(array_merge($validated, ['updated_by' => Auth::id()]));
@@ -160,7 +160,7 @@ class TagController extends Controller
         $validated = $request->validate([
             'ayah_id' => 'required|int|exists:ayahs,id',
             'name' => 'required|string',
-            'parent_id' => 'sometimes|int',
+            'parent_id' => 'sometimes|nullable|int',
             'notes' => 'nullable|string'
         ]);
 
@@ -269,7 +269,7 @@ class TagController extends Controller
 
     public function searchTags(Request $request){
         $validated = $request->validate([
-            'name' => 'sometimes|required',
+            'name' => 'sometimes|nullable|string',
             'page' => 'sometimes|integer|min:1',
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
