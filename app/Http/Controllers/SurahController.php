@@ -17,24 +17,26 @@ class SurahController extends Controller
     {
         try {
             $validated = $request->validate([
-                'surah' => 'sometimes|int',
+                'surah' => 'sometimes|nullable|int',
                 'type' => [
                     'sometimes',
+                    'nullable',
                     function ($attribute, $value, $fail) {
-                        if (!in_array(strtolower($value), ['meccan', 'medinan', ''])) {
+                        if ($value !== '' && !in_array(strtolower($value), ['meccan', 'medinan'])) {
                             $fail("The $attribute must be either 'meccan' or 'medinan'.");
                         }
                     }
                 ],
                 'revelation_order' => [
                     'sometimes',
+                    'nullable',
                     function ($attribute, $value, $fail) {
-                        if (!in_array(strtolower($value), ['asc', 'desc', ''])) {
+                        if ($value !== '' && !in_array(strtolower($value), ['asc', 'desc'])) {
                             $fail("The $attribute must be either 'asc' or 'desc'.");
                         }
                     }
                 ],
-                'name' => 'sometimes|string',
+                'name' => 'sometimes|nullable|string',
             ]);
 
             $query = Surah::query()
@@ -52,18 +54,17 @@ class SurahController extends Controller
                     'ayahs.juz_id'
                 );
 
-            // If 'surah' is provided, return only that Surah
+            // If 'surah' is provided and not null, return only that Surah
             if (!empty($validated['surah'])) {
                 $surah = $query->where('surahs.id', $validated['surah'])->firstOrFail();
-
                 return $this->apiSuccess($surah, 'Surah retrieved successfully');
             }
 
             // Apply optional filters
-            if (!empty($validated['type']) && $validated['type'] !== '') {
+            if (!empty($validated['type'])) {
                 $query->where('surahs.type', 'ILIKE', "%{$validated['type']}%");
             }
-            if (!empty($validated['revelation_order']) && $validated['revelation_order'] !== '') {
+            if (!empty($validated['revelation_order'])) {
                 $query->orderBy('surahs.number', $validated['revelation_order']);
             }
             if (!empty($validated['name'])) {

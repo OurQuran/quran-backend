@@ -25,6 +25,7 @@ class BookmarksController extends Controller
                 ->join('ayahs', 'ayahs.id', '=', 'bookmarks.ayah_id')
                 ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
                 ->select(
+                    'bookmarks.id as bookmark_id',
                     'surahs.id as surah_id',
                     'surahs.name_en as surah_name', // Include surah_name directly
                     'ayahs.id as ayah_id', // Alias to avoid ambiguity
@@ -44,6 +45,7 @@ class BookmarksController extends Controller
             // Prepare final response as a flat array
             $formattedBookmarks = $bookmarks->map(function ($item) {
                 return [
+                    'bookmark_id' => $item->bookmark_id,
                     'surah_id' => $item->surah_id,
                     'surah_name' => $item->surah_name, // Flattened field for surah_name
                     'ayah_id' => $item->ayah_id,
@@ -82,7 +84,7 @@ class BookmarksController extends Controller
                 ->first();
 
             if ($existingBookmark) {
-                return $this->apiError('Bookmark already exists.', 409);
+                return $this->apiError('Bookmark already exists', 409);
             }
 
             $bookmark = Bookmark::create([
@@ -91,25 +93,21 @@ class BookmarksController extends Controller
                 'created_at' => now(),
             ]);
 
-            return $this->apiSuccess($bookmark, 'Bookmark created successfully.', 201);
+            return $this->apiSuccess($bookmark, 'Bookmark created successfully', 201);
         } catch (\Exception $e) {
             return $this->apiError('Failed to create Bookmark');
         }
     }
 
-
-    public function destroy(int $id)
+    public function destroy(Bookmark $bookmark)
     {
-        try {
-            $bookmark = Bookmark::query()
-                ->where('user_id', "=", Auth::id())
-                ->findOrFail($id);
-
-            $bookmark->delete();
-
-            return $this->apiSuccess(null, 'Bookmark deleted successfully');
-        } catch (\Exception $e) {
-            return $this->apiError('Failed to delete Bookmark');
+        if ($bookmark->user_id !== Auth::id()) {
+            return $this->apiError('Unauthorized', 403);
         }
+
+        $bookmark->delete();
+
+        return $this->apiSuccess(null, 'Bookmark deleted successfully');
     }
+
 }
