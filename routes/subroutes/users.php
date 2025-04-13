@@ -11,10 +11,10 @@ Route::prefix('users')->group(function () {
         Route::middleware(['role:superadmin'])->group(function () {
             Route::get('/', [UserController::class, 'index']);
             Route::post('/', [UserController::class, 'store']);
-            Route::post("/{id}/change_password", [UserController::class, 'changeUserPassword']);
-            Route::get('/{id}', [UserController::class, 'show']);
-            Route::put('/{id}', [UserController::class, 'update']);
-            Route::delete('/{id}', [UserController::class, 'destroy']);
+            Route::post("/{user}/change_password", [UserController::class, 'changeUserPassword']);
+            Route::get('/{user}', [UserController::class, 'show']);
+            Route::put('/{user}', [UserController::class, 'update']);
+            Route::delete('/{user}', [UserController::class, 'destroy']);
         });
     });
 });

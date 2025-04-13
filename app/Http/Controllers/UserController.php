@@ -70,17 +70,13 @@ class UserController extends Controller
         return $this->apiSuccess($user, "User created successfully", 201);
     }
 
-    public function show(int $id)
+    public function show(User $user)
     {
-        $user = User::query()->findOrFail($id);
-
         return $this->apiSuccess($user, 'User retrieved successfully');
     }
 
-    public function update(Request $request, int $user)
+    public function update(Request $request, User $user)
     {
-        $user = User::query()->findOrFail($user);
-
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'username' => 'sometimes|string|max:255|unique:users,username,' . $user->id,
@@ -96,9 +92,11 @@ class UserController extends Controller
         return $this->apiSuccess(null, "User updated successfully");
     }
 
-    public function destroy(int $id)
+    public function destroy(User $user)
     {
-        $user = User::query()->whereNot('role', 'superadmin')->findOrFail($id);
+        if ($user->role === 'superadmin') {
+            return $this->apiError('User not found', 404);
+        }
 
         $user->delete();
         return $this->apiSuccess(null, "User deleted successfully");
@@ -220,14 +218,12 @@ class UserController extends Controller
         }
     }
 
-    public function changeUserPassword(Request $request, int $id)
+    public function changeUserPassword(Request $request, User $user)
     {
         try {
             $validated = $request->validate([
                 'new_password' => 'required|string|min:6|confirmed'
             ]);
-
-            $user = User::query()->findOrFail($id);
 
             $newPassword = Hash::make($validated['new_password']);
 

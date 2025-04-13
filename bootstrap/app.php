@@ -34,10 +34,13 @@ return Application::configure(basePath: dirname(__DIR__))
                 $modelName = convertFromPascalCaseToNormalCase($model);
                 $message = "No $modelName found";
             }
-            return response()->json(array(
-                "success" => false,
-                "message" => $message,
-                "data" => null,
-            ), $e->getStatusCode());
+
+            return response()->json(['message' => $message], 404);
+
+            // return response()->json(array(
+            //     "success" => false,
+            //     "message" => $message,
+            //     "data" => null,
+            // ), $e->getStatusCode());
         });
     })->create();

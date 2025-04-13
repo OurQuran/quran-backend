@@ -85,39 +85,34 @@ class TagController extends Controller
         return $this->apiSuccess($tag, 'Tag created successfully', 201);
     }
 
-    public function show(int $id)
+    public function show(Tag $tag)
     {
-        $tag = Tag::query()
-            ->with([
-                'allChildren' => function ($query) {
-                    $query->with('allChildren');
-                },
-                'ayahs.tags' => function ($query) {
-                    $query->select('tags.id', 'tags.name');
-                }
-            ])
-            ->findOrFail($id);
+        $tag->load([
+            'allChildren' => function ($query) {
+                $query->with('allChildren');
+            },
+            'ayahs.tags' => function ($query) {
+                $query->select('tags.id', 'tags.name');
+            }
+        ]);
 
-        // Hide pivot on ayahs and their tags
         $tag->ayahs->each(function ($ayah) {
-            $ayah->makeHidden('pivot'); // 👈 hides pivot on the ayah itself
-            $ayah->tags = $ayah->tags->makeHidden('pivot'); // hide pivot on related tags
+            $ayah->makeHidden('pivot');
+            $ayah->tags = $ayah->tags->makeHidden('pivot');
         });
 
         if (!$tag->relationLoaded('ayahs') || $tag->ayahs->isEmpty()) {
             $tag->setRelation('ayahs', collect([]));
         }
 
-        // Recursively ensure children have ayahs set and pivot hidden
         $this->addEmptyAyahsToChildren($tag->allChildren);
 
         return $this->apiSuccess($tag, 'Tag retrieved successfully');
     }
 
-    public function update(Request $request, int $id)
-    {
-        $tag = Tag::query()->findOrFail($id);
 
+    public function update(Request $request, Tag $tag)
+    {
         $validated = $request->validate([
             'parent_id' => 'sometimes|int|exists:tags,id',
             'name' => 'sometimes|string|unique:tags,name',
@@ -128,10 +123,8 @@ class TagController extends Controller
         return $this->apiSuccess($tag, 'Tag updated successfully');
     }
 
-    public function destroy(int $id)
+    public function destroy(Tag $tag)
     {
-        $tag = Tag::query()->findOrFail($id);
-
         $tag->delete();
         return $this->apiSuccess(null, 'Tag deleted successfully');
     }

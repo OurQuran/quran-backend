@@ -8,9 +8,9 @@ Route::prefix('tags')->group(function () {
     Route::post('/', [TagController::class, 'store'])->middleware('auth:sanctum');
     Route::get('/unapproved', [TagController::class, 'getUnapprovedTags'])->middleware('auth:sanctum');
     Route::get('/tags_search', [TagController::class, 'searchTags']);
-    Route::get('/{id}', [TagController::class, 'show']);
-    Route::put('/{id}', [TagController::class, 'update'])->middleware('auth:sanctum');
-    Route::delete('/{id}', [TagController::class, 'destroy'])->middleware('auth:sanctum');
+    Route::get('/{tag}', [TagController::class, 'show']);
+    Route::put('/{tag}', [TagController::class, 'update'])->middleware('auth:sanctum');
+    Route::delete('/{tag}', [TagController::class, 'destroy'])->middleware('auth:sanctum');
 
     Route::post('/approve', [TagController::class, 'approve'])->middleware( 'auth:sanctum');
     Route::post('/unapprove', [TagController::class, 'unapprove'])->middleware( 'auth:sanctum');
