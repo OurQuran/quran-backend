@@ -371,16 +371,43 @@ class TagController extends Controller
     {
         $validated = $request->validate([
             'references' => 'required|array',
-            'references.*' => 'required|string|regex:/^\d+:\d+(,\d+)*$/',
-            'tag_name' => 'required|string'
+            'references.*' => 'required|string|regex:/^\d+:[\d,\-\s]+$/',
+            'tag_name' => 'required_without:tag_id|string|nullable',
+            'tag_id' => 'required_without:tag_name|integer|exists:tags,id|nullable',
         ]);
 
-        $tag = Tag::firstOrCreate(['name' => $validated['tag_name']]);
+        if (!empty($validated['tag_name'] ?? null) && !empty($validated['tag_id'] ?? null)) {
+            return $this->apiError('Provide either tag_name or tag_id, not both.', 422);
+        }
+
+        // Get the tag
+        if (!empty($validated['tag_id'])) {
+            $tag = Tag::find($validated['tag_id']);
+        } else {
+            $tag = Tag::firstOrCreate(['name' => $validated['tag_name']]);
+        }
+
         $results = [];
 
         foreach ($validated['references'] as $refString) {
             [$surahId, $versesPart] = explode(':', $refString);
-            $verseNumbers = explode(',', $versesPart);
+
+            $verseParts = explode(',', $versesPart);
+            $verseNumbers = [];
+
+            foreach ($verseParts as $part) {
+                $part = trim($part);
+                if (str_contains($part, '-')) {
+                    [$start, $end] = explode('-', $part);
+                    $start = (int) trim($start);
+                    $end = (int) trim($end);
+                    if ($start <= $end) {
+                        $verseNumbers = array_merge($verseNumbers, range($start, $end));
+                    }
+                } else {
+                    $verseNumbers[] = (int) $part;
+                }
+            }
 
             foreach ($verseNumbers as $verseNumber) {
                 $ayah = Ayah::where('surah_id', $surahId)
