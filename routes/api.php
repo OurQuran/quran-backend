@@ -15,3 +15,4 @@ Route::post('/logout', [UserController::class, 'logout'])->middleware('auth:sanc
 Route::get('/me', [UserController::class, 'me'])->middleware('auth:sanctum');
 
 Route::post('/tags-scrape', [TagController::class, 'scrape']);
+Route::post('/tags-scrape-array', [TagController::class, 'scrapeArray']);

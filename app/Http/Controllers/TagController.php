@@ -306,33 +306,125 @@ class TagController extends Controller
     {
         $validated = $request->validate([
             'surah_id' => 'required|integer|exists:surahs,id',
-            'verse' => 'required|integer|min:1',
+            'verse' => [
+                'required',
+                function ($attribute, $value, $fail) {
+                    $verses = is_array($value) ? $value : [$value];
+                    foreach ($verses as $v) {
+                        if (!is_numeric($v) || (int)$v < 1) {
+                            $fail("Each $attribute must be an integer >= 1.");
+                        }
+                    }
+                }
+            ],
             'tag_name' => 'required|string'
         ]);
 
-        // 1. Find the Ayah
-        $ayah = Ayah::where('surah_id', $validated['surah_id'])
-            ->where('number_in_surah', $validated['verse'])
-            ->firstOrFail();
-
-        // 2. Find or create the Tag
+        $verses = is_array($validated['verse']) ? $validated['verse'] : [$validated['verse']];
         $tag = Tag::firstOrCreate(['name' => $validated['tag_name']]);
 
-        // 3. Check if the tag is already attached to the ayah
-        $alreadyAttached = $ayah->tags()->where('tags.id', $tag->id)->exists();
+        $results = [];
 
-        if ($alreadyAttached) {
-            return $this->apiError("Tag '{$tag->name}' is already attached to this ayah.", 409);
+        foreach ($verses as $verseNumber) {
+            $ayah = Ayah::where('surah_id', $validated['surah_id'])
+                ->where('number_in_surah', $verseNumber)
+                ->first();
+
+            if (!$ayah) {
+                $results[] = [
+                    'verse' => $verseNumber,
+                    'status' => 'not found',
+                    'message' => "Verse $verseNumber not found."
+                ];
+                continue;
+            }
+
+            $alreadyAttached = $ayah->tags()->where('tags.id', $tag->id)->exists();
+
+            if ($alreadyAttached) {
+                $results[] = [
+                    'ayah_id' => $ayah->id,
+                    'verse' => $verseNumber,
+                    'status' => 'skipped',
+                    'message' => "Tag '{$tag->name}' already attached."
+                ];
+                continue;
+            }
+
+            $ayah->tags()->attach($tag->id);
+
+            $results[] = [
+                'ayah_id' => $ayah->id,
+                'verse' => $verseNumber,
+                'tag_id' => $tag->id,
+                'tag_name' => $tag->name,
+                'status' => 'success',
+                'message' => "Tag '{$tag->name}' attached."
+            ];
         }
 
-        // 4. Attach the tag
-        $ayah->tags()->attach($tag->id);
+        return $this->apiSuccess($results, 'Scraping/tagging completed.');
+    }
 
-        return $this->apiSuccess([
-            'ayah_id' => $ayah->id,
-            'tag_id' => $tag->id,
-            'tag_name' => $tag->name
-        ], 'Tag attached successfully.');
+    //
+    public function scrapeArray(Request $request)
+    {
+        $validated = $request->validate([
+            'references' => 'required|array',
+            'references.*' => 'required|string|regex:/^\d+:\d+(,\d+)*$/',
+            'tag_name' => 'required|string'
+        ]);
+
+        $tag = Tag::firstOrCreate(['name' => $validated['tag_name']]);
+        $results = [];
+
+        foreach ($validated['references'] as $refString) {
+            [$surahId, $versesPart] = explode(':', $refString);
+            $verseNumbers = explode(',', $versesPart);
+
+            foreach ($verseNumbers as $verseNumber) {
+                $ayah = Ayah::where('surah_id', $surahId)
+                    ->where('number_in_surah', $verseNumber)
+                    ->first();
+
+                if (!$ayah) {
+                    $results[] = [
+                        'surah' => (int) $surahId,
+                        'verse' => (int) $verseNumber,
+                        'status' => 'not_found',
+                        'message' => "Ayah $surahId:$verseNumber not found."
+                    ];
+                    continue;
+                }
+
+                $alreadyAttached = $ayah->tags()->where('tags.id', $tag->id)->exists();
+
+                if ($alreadyAttached) {
+                    $results[] = [
+                        'ayah_id' => $ayah->id,
+                        'surah' => (int) $surahId,
+                        'verse' => (int) $verseNumber,
+                        'status' => 'skipped',
+                        'message' => "Tag already attached to $surahId:$verseNumber."
+                    ];
+                    continue;
+                }
+
+                $ayah->tags()->attach($tag->id);
+
+                $results[] = [
+                    'ayah_id' => $ayah->id,
+                    'surah' => (int) $surahId,
+                    'verse' => (int) $verseNumber,
+                    'tag_id' => $tag->id,
+                    'tag_name' => $tag->name,
+                    'status' => 'success',
+                    'message' => "Tagged $surahId:$verseNumber."
+                ];
+            }
+        }
+
+        return $this->apiSuccess($results, 'Tagging completed.');
     }
 
     /**
