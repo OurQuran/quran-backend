@@ -16,3 +16,5 @@ Route::get('/me', [UserController::class, 'me'])->middleware('auth:sanctum');
 
 Route::post('/tags-scrape', [TagController::class, 'scrape']);
 Route::post('/tags-scrape-array', [TagController::class, 'scrapeArray']);
+Route::post('/untag', [TagController::class, 'untag']);
+Route::post('/untag-array', [TagController::class, 'untagArray']);

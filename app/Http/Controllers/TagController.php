@@ -390,24 +390,7 @@ class TagController extends Controller
         $results = [];
 
         foreach ($validated['references'] as $refString) {
-            [$surahId, $versesPart] = explode(':', $refString);
-
-            $verseParts = explode(',', $versesPart);
-            $verseNumbers = [];
-
-            foreach ($verseParts as $part) {
-                $part = trim($part);
-                if (str_contains($part, '-')) {
-                    [$start, $end] = explode('-', $part);
-                    $start = (int) trim($start);
-                    $end = (int) trim($end);
-                    if ($start <= $end) {
-                        $verseNumbers = array_merge($verseNumbers, range($start, $end));
-                    }
-                } else {
-                    $verseNumbers[] = (int) $part;
-                }
-            }
+            list($surahId, $verseNumbers) = $this->parseVerseNumbers($refString);
 
             foreach ($verseNumbers as $verseNumber) {
                 $ayah = Ayah::where('surah_id', $surahId)
@@ -454,6 +437,132 @@ class TagController extends Controller
         return $this->apiSuccess($results, 'Tagging completed.');
     }
 
+    public function untag(Request $request)
+    {
+        $validated = $request->validate([
+            'surah_id' => 'required|integer',
+            'verse' => 'required|integer',
+            'tag_name' => 'required_without:tag_id|string|nullable',
+            'tag_id' => 'required_without:tag_name|integer|exists:tags,id|nullable',
+        ]);
+
+        if (!empty($validated['tag_name'] ?? null) && !empty($validated['tag_id'] ?? null)) {
+            return $this->apiError('Provide either tag_name or tag_id, not both.', 422);
+        }
+
+        // Fetch tag
+        if (!empty($validated['tag_id'])) {
+            $tag = Tag::find($validated['tag_id']);
+        } else {
+            $tag = Tag::where('name', $validated['tag_name'])->first();
+            if (!$tag) {
+                return $this->apiError('The specified tag name does not exist.', 404);
+            }
+        }
+
+        // Fetch ayah
+        $ayah = Ayah::where('surah_id', $validated['surah_id'])
+            ->where('number_in_surah', $validated['verse'])
+            ->first();
+
+        if (!$ayah) {
+            return $this->apiError("Ayah {$validated['surah_id']}:{$validated['verse']} not found.", 404);
+        }
+
+        // Check if tag is attached
+        $alreadyAttached = $ayah->tags()->where('tags.id', $tag->id)->exists();
+
+        if (!$alreadyAttached) {
+            return $this->apiError("Tag is not attached to {$validated['surah_id']}:{$validated['verse']}.", 422);
+        }
+
+        // Detach tag
+        $ayah->tags()->detach($tag->id);
+
+        return $this->apiSuccess([
+            'ayah_id' => $ayah->id,
+            'surah' => (int) $validated['surah_id'],
+            'verse' => (int) $validated['verse'],
+            'tag_id' => $tag->id,
+            'tag_name' => $tag->name,
+            'status' => 'success',
+            'message' => "Tag detached from {$validated['surah_id']}:{$validated['verse']}."
+        ]);
+    }
+
+    public function untagArray(Request $request)
+    {
+        $validated = $request->validate([
+            'references' => 'required|array',
+            'references.*' => 'required|string|regex:/^\d+:[\d,\-\s]+$/',
+            'tag_name' => 'required_without:tag_id|string|nullable',
+            'tag_id' => 'required_without:tag_name|integer|exists:tags,id|nullable',
+        ]);
+
+        if (!empty($validated['tag_name'] ?? null) && !empty($validated['tag_id'] ?? null)) {
+            return $this->apiError('Provide either tag_name or tag_id, not both.', 422);
+        }
+
+        // Get the tag
+        if (!empty($validated['tag_id'])) {
+            $tag = Tag::find($validated['tag_id']);
+        } else {
+            $tag = Tag::where('name', $validated['tag_name'])->first();
+            if (!$tag) {
+                return $this->apiError('The specified tag name does not exist.', 404);
+            }
+        }
+
+        $results = [];
+
+        foreach ($validated['references'] as $refString) {
+            list($surahId, $verseNumbers) = $this->parseVerseNumbers($refString);
+
+            foreach ($verseNumbers as $verseNumber) {
+                $ayah = Ayah::where('surah_id', $surahId)
+                    ->where('number_in_surah', $verseNumber)
+                    ->first();
+
+                if (!$ayah) {
+                    $results[] = [
+                        'surah' => (int) $surahId,
+                        'verse' => (int) $verseNumber,
+                        'status' => 'not_found',
+                        'message' => "Ayah $surahId:$verseNumber not found."
+                    ];
+                    continue;
+                }
+
+                $alreadyAttached = $ayah->tags()->where('tags.id', $tag->id)->exists();
+
+                if (!$alreadyAttached) {
+                    $results[] = [
+                        'ayah_id' => $ayah->id,
+                        'surah' => (int) $surahId,
+                        'verse' => (int) $verseNumber,
+                        'status' => 'skipped',
+                        'message' => "Tag not attached to $surahId:$verseNumber."
+                    ];
+                    continue;
+                }
+
+                $ayah->tags()->detach($tag->id);
+
+                $results[] = [
+                    'ayah_id' => $ayah->id,
+                    'surah' => (int) $surahId,
+                    'verse' => (int) $verseNumber,
+                    'tag_id' => $tag->id,
+                    'tag_name' => $tag->name,
+                    'status' => 'success',
+                    'message' => "Untagged $surahId:$verseNumber."
+                ];
+            }
+        }
+
+        return $this->apiSuccess($results, 'Untagging completed.');
+    }
+
     /**
      * Recursively set ayahs as an empty array for all children if not already set.
      */
@@ -469,5 +578,28 @@ class TagController extends Controller
                 $this->addEmptyAyahsToChildren($child->allChildren);
             }
         }
+    }
+
+    private function parseVerseNumbers(mixed $refString): array
+    {
+        [$surahId, $versesPart] = explode(':', $refString);
+
+        $verseParts = explode(',', $versesPart);
+        $verseNumbers = [];
+
+        foreach ($verseParts as $part) {
+            $part = trim($part);
+            if (str_contains($part, '-')) {
+                [$start, $end] = explode('-', $part);
+                $start = (int)trim($start);
+                $end = (int)trim($end);
+                if ($start <= $end) {
+                    $verseNumbers = array_merge($verseNumbers, range($start, $end));
+                }
+            } else {
+                $verseNumbers[] = (int)$part;
+            }
+        }
+        return array($surahId, $verseNumbers);
     }
 }
