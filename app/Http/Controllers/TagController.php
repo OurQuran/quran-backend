@@ -267,7 +267,8 @@ class TagController extends Controller
         return $this->apiSuccess($ayahTag, 'Tag unapproved successfully');
     }
 
-    public function searchTags(Request $request){
+    public function searchTags(Request $request)
+    {
         $validated = $request->validate([
             'name' => 'sometimes|nullable|string',
             'page' => 'sometimes|integer|min:1',
@@ -277,19 +278,19 @@ class TagController extends Controller
         $page = (int) ($validated['page'] ?? 1);
         $perPage = (int) ($validated['per_page'] ?? 20);
 
-        $query= Tag::query()
-            ->select('id','name')
-            ->skip(($page - 1) * $perPage)
-            ->take($perPage);
+        $query = Tag::query()->select('id', 'name');
 
-        if (!empty($validated['name'])) {
+        if (isset($validated['name']) && strlen(trim($validated['name'])) > 0) {
             $query->whereRaw('name ILIKE ?', ["%{$validated['name']}%"]);
         }
 
         $totalCount = $query->count();
-        $totalPages = ceil($totalCount / $perPage);
+        $totalPages = (int) ceil($totalCount / $perPage);
 
-        $tags = $query->get();
+        $tags = $query
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
 
         return $this->apiSuccess([
             'meta' => [
@@ -301,6 +302,7 @@ class TagController extends Controller
             'result' => $tags
         ], 'Tags retrieved successfully');
     }
+
 
     public function scrape(Request $request)
     {
