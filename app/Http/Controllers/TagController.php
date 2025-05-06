@@ -209,21 +209,36 @@ class TagController extends Controller
         $perPage = (int)($validated['per_page'] ?? 20);
 
         $unapprovedTagsQuery = AyahTag::query()
-            ->where('approved_by', '=', null)
-            ->orWhere('approved_at', '=', null)
+            ->with([
+                'ayah',
+                'tag.creator:id,name,username,role',
+                'tag.updater:id,name,username,role',
+            ])
+            ->where(function($query) {
+                $query->whereNull('approved_by')
+                    ->orWhereNull('approved_at');
+            })
             ->orderBy('updated_at', 'desc');
 
         $totalCount = $unapprovedTagsQuery->count();
         $totalPages = ceil($totalCount / $perPage);
 
-        $unapprovedTags = $unapprovedTagsQuery->skip(($page - 1) * $perPage)
-            ->take($perPage)
+        $unapprovedTags = $unapprovedTagsQuery
+            ->forPage($page, $perPage)
             ->get();
+
+        $unapprovedTags->makeHidden(['tag_id', 'ayah_id', 'created_by', 'updated_by']);
+
+        $unapprovedTags->each(function($ayahTag) {
+            if ($ayahTag->tag) {
+                $ayahTag->tag->makeHidden(['created_by', 'updated_by']);
+            }
+        });
 
         return $this->apiSuccess([
             'meta' => [
                 'total_count' => $totalCount,
-                'total_pages' => $totalPages,
+                'total_pages' => (int)$totalPages,
                 'current_page' => $page,
                 'page_size' => $perPage
             ],
@@ -610,60 +625,46 @@ class TagController extends Controller
         $page    = (int)($validated['page'] ?? 1);
         $perPage = (int)($validated['per_page'] ?? 20);
 
-        // 1) Build the base query
+        // Build query with all relations and counts
         $query = Tag::query()
-            ->select('id','name','parent_id','created_by','updated_by')
-            // load this tag’s creator & updater...
-            ->with(['creator','updater'])
-            // ...and also load its parent, plus the parent’s creator & updater
+            ->select('id', 'name', 'parent_id', 'created_by', 'updated_by')
             ->with([
+                'creator:id,name,username,role',
+                'updater:id,name,username,role',
                 'parent' => function($q) {
-                    $q->select('id','name','parent_id','created_by','updated_by')
-                        ->with(['creator','updater'])
-                    ->withCount('allChildren as children_count');
-                }
+                    $q->select('id', 'name', 'parent_id', 'created_by', 'updated_by')
+                        ->withCount('allChildren as children_count');
+                },
+                'parent.creator:id,name,username,role',
+                'parent.updater:id,name,username,role'
             ])
-            // count all recursive descendants
-            ->withCount(['allChildren as children_count']);
+            ->withCount('allChildren as children_count');
 
-        // 2) Optional name filter
-        // if (!empty(trim($validated['name']))) {
-        //     $query->where('name', 'ILIKE', "%{$validated['name']}%");
-        // }
+        // Apply name filter if provided
+        if (!empty($validated['name'])) {
+            $query->where('name', 'ILIKE', "%" . trim($validated['name']) . "%");
+        }
 
-        // 3) Meta
+        // Get total count for pagination metadata
         $totalCount = $query->count();
-        $totalPages = (int) ceil($totalCount / $perPage);
 
-        // 4) Pagination + fetch
-        $tags = $query
-            ->forPage($page, $perPage)
-            ->get();
+        // Fetch paginated results
+        $tags = $query->forPage($page, $perPage)->get();
 
-        $tags->makeHidden(['created_by','updated_by','parent_id']);
-
-        // If you loaded a 'parent' relation, hide them there too
-        $tags->each(function($tag) {
-            if ($tag->creator) {
-                $tag->creator->makeHidden(['created_at','updated_at','deleted_at']);
-            }
-
-            if ($tag->updater) {
-                $tag->updater->makeHidden(['created_at','updated_at','deleted_at']);
-            }
-
+        // Hide internal fields
+        $hiddenFields = ['created_by', 'updated_by', 'parent_id'];
+        $tags->makeHidden($hiddenFields);
+        $tags->each(function($tag) use ($hiddenFields) {
             if ($tag->parent) {
-                $tag->parent->makeHidden(['created_by','updated_by','parent_id']);
-                $tag->parent->creator->makeHidden(['created_at','updated_at','deleted_at']);
-                $tag->parent->updater->makeHidden(['created_at','updated_at','deleted_at']);
+                $tag->parent->makeHidden($hiddenFields);
             }
         });
 
-        // 5) Return
+        // Return formatted response
         return $this->apiSuccess([
             'meta' => [
                 'total_count'  => $totalCount,
-                'total_pages'  => $totalPages,
+                'total_pages'  => (int)ceil($totalCount / $perPage),
                 'current_page' => $page,
                 'page_size'    => $perPage,
             ],
