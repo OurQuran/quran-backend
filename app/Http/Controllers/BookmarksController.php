@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Ayah;
 use App\Models\Bookmark;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
@@ -99,13 +100,13 @@ class BookmarksController extends Controller
         }
     }
 
-    public function destroy(Bookmark $bookmark)
+    public function destroy(Ayah $ayah)
     {
-        if ($bookmark->user_id !== Auth::id()) {
-            return $this->apiError('Unauthorized', 403);
-        }
-
-        $bookmark->delete();
+        Bookmark::query()
+            ->where('ayah_id', $ayah->id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail()
+            ->delete();
 
         return $this->apiSuccess(null, 'Bookmark deleted successfully');
     }

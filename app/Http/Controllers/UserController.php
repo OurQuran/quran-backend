@@ -145,37 +145,43 @@ class UserController extends Controller
 
     public function signup(Request $request)
     {
-        $user = $this->checkLoginToken();
-
-        if ($user) {
-            return $this->apiError("You must logout in order to signup");
+        // 1) Prevent signing up if already authenticated
+        if ($this->checkLoginToken()) {
+            return $this->apiError("You must logout in order to signup", 403);
         }
 
+        // 2) Validate
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'username' => 'required|string|max:255|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|string|in:user'
         ]);
 
+        // 3) Create the user
         $user = User::create([
             'name' => $validated['name'],
             'username' => $validated['username'],
             'password' => Hash::make($validated['password']),
-            'role' => $validated['role']
+            'role' => 'user',
         ]);
 
-        if (Auth::attempt(['username' => $user['username'], 'password' => $user['password']], true)) {
-            $token = $user->createToken('auth_token')->plainTextToken;
+        // 4) Log them in *directly* with the model
+        Auth::login($user, true);
 
-            DB::table('personal_access_tokens')
-                ->where('tokenable_id', $user->id) // Ensure using correct user ID field (might be `id`, not `user_id`)
-                ->update(['last_used_at' => now()]);
+        // 5) Create the Sanctum token
+        $tokenResult = $user->createToken('auth_token');
+        $plainText = $tokenResult->plainTextToken;
 
-            return $this->apiSuccess(['token' => $token, 'user' => $user], "User created successfully", 201);
-        }
+        // 6) Optionally update only *that* token’s last_used_at
+        DB::table('personal_access_tokens')
+            ->where('id', $tokenResult->accessToken->id)
+            ->update(['last_used_at' => now()]);
 
-        return $this->apiError("Wrong credentials", 401);
+        // 7) Return success
+        return $this->apiSuccess([
+            'token' => $plainText,
+            'user' => $user,
+        ], "User created successfully", 201);
     }
 
     public function logout(Request $request)

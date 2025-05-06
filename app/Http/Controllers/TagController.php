@@ -7,6 +7,7 @@ use App\Models\AyahTag;
 use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 
 class TagController extends Controller
 {
@@ -19,8 +20,8 @@ class TagController extends Controller
             'user_id' => 'sometimes|nullable|integer|min:1|exists:users,id'
         ]);
 
-        $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 20);
+        $page = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 20);
 
         // Query only parent tags
         $query = Tag::query()
@@ -77,7 +78,7 @@ class TagController extends Controller
             'updated_by' => Auth::id(),
         ]);
 
-        if(isset($validated['parent_id']) && $validated['parent_id'] !== 0){
+        if (isset($validated['parent_id']) && $validated['parent_id'] !== 0) {
             $tag->parent_id = $validated['parent_id'];
             $tag->save();
         }
@@ -197,14 +198,15 @@ class TagController extends Controller
         );
     }
 
-    public function getUnapprovedTags(Request $request) {
+    public function getUnapprovedTags(Request $request)
+    {
         $validated = $request->validate([
             'page' => 'sometimes|integer|min:1',
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
 
-        $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 20);
+        $page = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 20);
 
         $unapprovedTagsQuery = AyahTag::query()
             ->where('approved_by', '=', null)
@@ -229,15 +231,16 @@ class TagController extends Controller
         ], 'Unapproved associated Tags with Ayahs retrieved successfully');
     }
 
-    public function approve(Request $request){
+    public function approve(Request $request)
+    {
         $validated = $request->validate([
             'id' => 'required|integer|exists:ayah_tags,id'
         ]);
 
         $ayahTag = AyahTag::query()->findOrFail($validated['id']);
 
-        if ($ayahTag->approved_at != null || $ayahTag->approved_by != null){
-           return $this->apiError('This tag is already approved'    );
+        if ($ayahTag->approved_at != null || $ayahTag->approved_by != null) {
+            return $this->apiError('This tag is already approved');
         }
 
         $ayahTag->approved_at = now();
@@ -248,14 +251,15 @@ class TagController extends Controller
         return $this->apiSuccess($ayahTag, 'Tag approved successfully');
     }
 
-    public function unapprove(Request $request){
+    public function unapprove(Request $request)
+    {
         $validated = $request->validate([
             'id' => 'required|integer|exists:ayah_tags,id'
         ]);
 
         $ayahTag = AyahTag::query()->findOrFail($validated['id']);
 
-        if ($ayahTag->approved_at == null || $ayahTag->approved_by == null){
+        if ($ayahTag->approved_at == null || $ayahTag->approved_by == null) {
             return $this->apiError('This tag is already unapproved');
         }
 
@@ -275,8 +279,8 @@ class TagController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
 
-        $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 20);
+        $page = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 20);
 
         $query = Tag::query()->select('id', 'name');
 
@@ -285,7 +289,7 @@ class TagController extends Controller
         }
 
         $totalCount = $query->count();
-        $totalPages = (int) ceil($totalCount / $perPage);
+        $totalPages = (int)ceil($totalCount / $perPage);
 
         $tags = $query
             ->skip(($page - 1) * $perPage)
@@ -401,8 +405,8 @@ class TagController extends Controller
 
                 if (!$ayah) {
                     $results[] = [
-                        'surah' => (int) $surahId,
-                        'verse' => (int) $verseNumber,
+                        'surah' => (int)$surahId,
+                        'verse' => (int)$verseNumber,
                         'status' => 'not_found',
                         'message' => "Ayah $surahId:$verseNumber not found."
                     ];
@@ -414,8 +418,8 @@ class TagController extends Controller
                 if ($alreadyAttached) {
                     $results[] = [
                         'ayah_id' => $ayah->id,
-                        'surah' => (int) $surahId,
-                        'verse' => (int) $verseNumber,
+                        'surah' => (int)$surahId,
+                        'verse' => (int)$verseNumber,
                         'status' => 'skipped',
                         'message' => "Tag already attached to $surahId:$verseNumber."
                     ];
@@ -426,8 +430,8 @@ class TagController extends Controller
 
                 $results[] = [
                     'ayah_id' => $ayah->id,
-                    'surah' => (int) $surahId,
-                    'verse' => (int) $verseNumber,
+                    'surah' => (int)$surahId,
+                    'verse' => (int)$verseNumber,
                     'tag_id' => $tag->id,
                     'tag_name' => $tag->name,
                     'status' => 'success',
@@ -439,11 +443,10 @@ class TagController extends Controller
         return $this->apiSuccess($results, 'Tagging completed.');
     }
 
-    public function untag(Request $request)
+    public function unattachAyahTag(Request $request)
     {
         $validated = $request->validate([
-            'surah_id' => 'required|integer',
-            'verse' => 'required|integer',
+            'ayah_id' => 'required|integer|exists:ayahs,id',
             'tag_name' => 'required_without:tag_id|string|nullable',
             'tag_id' => 'required_without:tag_name|integer|exists:tags,id|nullable',
         ]);
@@ -463,19 +466,26 @@ class TagController extends Controller
         }
 
         // Fetch ayah
-        $ayah = Ayah::where('surah_id', $validated['surah_id'])
-            ->where('number_in_surah', $validated['verse'])
-            ->first();
+        $ayah = Ayah::query();
+
+        if (Auth::user()->role == 'admin' || Auth::user()->role == 'superadmin') {
+            $ayah->where('id', $validated['ayah_id'])
+                ->first();
+        } else {
+            $ayah->where('id', $validated['ayah_id'])
+                ->where('createdBy', Auth::id())
+                ->first();
+        }
 
         if (!$ayah) {
-            return $this->apiError("Ayah {$validated['surah_id']}:{$validated['verse']} not found.", 404);
+            return $this->apiError("Ayah with ID {$validated['ayah_id']} not found.", 404);
         }
 
         // Check if tag is attached
         $alreadyAttached = $ayah->tags()->where('tags.id', $tag->id)->exists();
 
         if (!$alreadyAttached) {
-            return $this->apiError("Tag is not attached to {$validated['surah_id']}:{$validated['verse']}.", 422);
+            return $this->apiError("Tag is not attached to this Ayah.", 422);
         }
 
         // Detach tag
@@ -483,13 +493,10 @@ class TagController extends Controller
 
         return $this->apiSuccess([
             'ayah_id' => $ayah->id,
-            'surah' => (int) $validated['surah_id'],
-            'verse' => (int) $validated['verse'],
+            'surah_id' => $ayah->surah_id,
             'tag_id' => $tag->id,
-            'tag_name' => $tag->name,
-            'status' => 'success',
-            'message' => "Tag detached from {$validated['surah_id']}:{$validated['verse']}."
-        ]);
+            'tag_name' => $tag->name
+        ], "Tag detached from {$ayah['surah_id']}:{$ayah['id']}.");
     }
 
     public function untagArray(Request $request)
@@ -527,8 +534,8 @@ class TagController extends Controller
 
                 if (!$ayah) {
                     $results[] = [
-                        'surah' => (int) $surahId,
-                        'verse' => (int) $verseNumber,
+                        'surah' => (int)$surahId,
+                        'verse' => (int)$verseNumber,
                         'status' => 'not_found',
                         'message' => "Ayah $surahId:$verseNumber not found."
                     ];
@@ -540,8 +547,8 @@ class TagController extends Controller
                 if (!$alreadyAttached) {
                     $results[] = [
                         'ayah_id' => $ayah->id,
-                        'surah' => (int) $surahId,
-                        'verse' => (int) $verseNumber,
+                        'surah' => (int)$surahId,
+                        'verse' => (int)$verseNumber,
                         'status' => 'skipped',
                         'message' => "Tag not attached to $surahId:$verseNumber."
                     ];
@@ -552,8 +559,8 @@ class TagController extends Controller
 
                 $results[] = [
                     'ayah_id' => $ayah->id,
-                    'surah' => (int) $surahId,
-                    'verse' => (int) $verseNumber,
+                    'surah' => (int)$surahId,
+                    'verse' => (int)$verseNumber,
                     'tag_id' => $tag->id,
                     'tag_name' => $tag->name,
                     'status' => 'success',
@@ -563,6 +570,33 @@ class TagController extends Controller
         }
 
         return $this->apiSuccess($results, 'Untagging completed.');
+    }
+
+    // todo
+    public function search(Request $request)
+    {
+        $validated = $request->validate([
+            'q' => 'required|string',
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100'
+        ]);
+
+        $page = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 20);
+
+        $result = Http::get(config('AI_URL') . '/search?q=' . $validated['q']);
+
+        $result = json_decode($result->body());
+
+        $result = $result->data;
+
+        foreach ($result as $ayah) {
+
+        }
+
+        $ayahs = Ayah::query()->whereIn('id', $result->ayah_id)->get();
+
+        return $this->apiSuccess($result, 'Search completed.');
     }
 
     /**

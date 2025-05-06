@@ -12,8 +12,9 @@ Route::prefix('tags')->group(function () {
     Route::put('/{tag}', [TagController::class, 'update'])->middleware('auth:sanctum');
     Route::delete('/{tag}', [TagController::class, 'destroy'])->middleware('auth:sanctum');
 
-    Route::post('/approve', [TagController::class, 'approve'])->middleware( 'auth:sanctum');
-    Route::post('/unapprove', [TagController::class, 'unapprove'])->middleware( 'auth:sanctum');
+    Route::post('/approve', [TagController::class, 'approve'])->middleware(['auth:sanctum', 'role:superadmin,admin']);
+    Route::post('/unapprove', [TagController::class, 'unapprove'])->middleware(['auth:sanctum', 'role:superadmin,admin']);
     Route::post('/attach', [TagController::class, 'attachAyahTag'])->middleware('auth:sanctum');
+    Route::post('/unattach', [TagController::class, 'unattachAyahTag'])->middleware('auth:sanctum');
     Route::post('/create-and-attach', [TagController::class, 'createTagAndAttachToAyah'])->middleware('auth:sanctum');
 });

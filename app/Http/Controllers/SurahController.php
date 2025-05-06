@@ -87,6 +87,7 @@ class SurahController extends Controller
     {
         try {
             $validated = $request->validatedWithDefaults();
+            $user = $this->checkLoginToken();
 
             // Base query for Ayahs
             $ayahsQuery = Ayah::query()
@@ -114,18 +115,18 @@ class SurahController extends Controller
                     $bismillahRow->number_in_surah = 0;
 
                     // Fetch and attach tags for Bismillah row
-                    $bismillahRow->tags = $bismillahRow->tags()->select('tags.id', 'tags.name')->get();
+                    $bismillahRow->tags = $this->getTagsForAyah($bismillahRow, $user);
                     $modifiedAyahs->push($bismillahRow);
                 }
 
                 // Fetch and attach tags for the current Ayah
-                $ayah->tags = $ayah->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
+                $ayah->tags = $this->getTagsForAyah($ayah, $user);
                 $modifiedAyahs->push($ayah);
             }
 
             return $this->apiSuccess($modifiedAyahs, 'Page retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError('Failed to retrieve page', $e->getMessage());
+            return $this->apiError('Failed to retrieve page');
         }
     }
 
@@ -133,6 +134,7 @@ class SurahController extends Controller
     {
         try {
             $validated = $request->validatedWithDefaults();
+            $user = $this->checkLoginToken();
 
             // Base query for Ayahs
             $ayahsQuery = Ayah::query()
@@ -164,26 +166,26 @@ class SurahController extends Controller
                         $bismillahRow->number_in_surah = 0;
 
                         // Fetch and attach tags for Bismillah row (Hides pivot)
-                        $bismillahRow->tags = $bismillahRow->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
+                        $bismillahRow->tags = $this->getTagsForAyah($bismillahRow, $user);
                         $modifiedAyahs->push($bismillahRow);
                     }
                 }
 
                 // Fetch and attach tags for the current Ayah (Hides pivot)
-                $ayah->tags = $ayah->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
+                $ayah->tags = $this->getTagsForAyah($ayah, $user);
                 $modifiedAyahs->push($ayah);
             }
 
             return $this->apiSuccess($modifiedAyahs, 'Juz retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError("Failed to retrieve Juz", $e->getMessage());
+            return $this->apiError("Failed to retrieve Juz");
         }
     }
 
-    public function getBySurah(SurahRequest $request, int $surah)
-    {
+    public function getBySurah(SurahRequest $request, int $surah) {
         try {
             $validated = $request->validatedWithDefaults();
+            $user = $this->checkLoginToken();
 
             // 1. Base query
             $ayahsQuery = Ayah::query()
@@ -210,23 +212,69 @@ class SurahController extends Controller
                     $bismillahRow->surah_id = $surah;
                     $bismillahRow->number_in_surah = 0;
 
-                    // Attach tags and hide pivot
-                    $bismillahRow->tags = $bismillahRow->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
-
+                    // Attach tags to Bismillah based on user role
+                    $bismillahRow->tags = $this->getTagsForAyah($bismillahRow, $user);
                     $modifiedAyahs->push($bismillahRow);
                 }
             }
 
             // 4. Attach tags to each Ayah and add to final list
             foreach ($ayahs as $ayah) {
-                $ayah->tags = $ayah->tags()->select('tags.id', 'tags.name')->get()->makeHidden('pivot');
+                $ayah->tags = $this->getTagsForAyah($ayah, $user);
                 $modifiedAyahs->push($ayah);
             }
 
             return $this->apiSuccess($modifiedAyahs, 'Surah retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError("Failed to retrieve Surah", $e->getMessage());
+            return $this->apiError("Failed to retrieve Surah");
         }
+    }
+
+    /**
+     * Get the appropriate tags for an ayah based on user role
+     *
+     * @param Ayah $ayah
+     * @param User|null $user
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    private function getTagsForAyah($ayah, $user = null)
+    {
+        $tagsQuery = $ayah->tags()->select(
+            'tags.id',
+            'tags.name',
+            'ayah_tags.created_by',
+            'ayah_tags.approved_by'
+        );
+
+        // If user is admin or superadmin, they can see all tags
+        if ($user && in_array($user->role, ['admin', 'superadmin'])) {
+            // No additional filters - admins see everything
+        }
+        // Regular users see:
+        // 1. Their own tags (approved or not)
+        // 2. Admin/superadmin created tags (whether approved or not)
+        // 3. Approved tags (by any user)
+        else {
+            $tagsQuery->where(function($query) use ($user) {
+                // Admin/superadmin created tags (all of them)
+                $query->whereExists(function($subquery) {
+                    $subquery->select(\DB::raw(1))
+                        ->from('users')
+                        ->whereColumn('users.id', '=', 'tags.created_by')
+                        ->whereIn('users.role', ['admin', 'superadmin']);
+                });
+
+                // If user is logged in, also include their own tags
+                if ($user) {
+                    $query->orWhere('ayah_tags.created_by', $user->id);
+                }
+
+                // Tags approved by anyone
+                $query->orWhereNotNull('ayah_tags.approved_by');
+            });
+        }
+
+        return $tagsQuery->get()->makeHidden('pivot');
     }
 
 

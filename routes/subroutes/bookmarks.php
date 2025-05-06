@@ -6,6 +6,6 @@ use App\Http\Controllers\BookmarksController;
 Route::middleware(['auth:sanctum'])->prefix('bookmarks')->group(function () {
     Route::get('/', [BookmarksController::class, 'index']);
     Route::post('/', [BookmarksController::class, 'create']);
-    Route::delete('/{bookmark}', [BookmarksController::class, 'destroy']);
+    Route::delete('/{ayah}', [BookmarksController::class, 'destroy']);
 });
 
