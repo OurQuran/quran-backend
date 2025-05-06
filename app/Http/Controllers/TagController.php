@@ -584,7 +584,7 @@ class TagController extends Controller
         $page = (int)($validated['page'] ?? 1);
         $perPage = (int)($validated['per_page'] ?? 20);
 
-        $result = Http::get(config('AI_URL') . '/search?q=' . $validated['q']);
+        $result = Http::get(env('AI_URL') . '/search?q=' . $validated['q']);
 
         $result = json_decode($result->body());
 
@@ -598,6 +598,79 @@ class TagController extends Controller
 
         return $this->apiSuccess($result, 'Search completed.');
     }
+
+    public function tagsDashboard(Request $request)
+    {
+        $validated = $request->validate([
+            'name'     => 'sometimes|nullable|string',
+            'page'     => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ]);
+
+        $page    = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 20);
+
+        // 1) Build the base query
+        $query = Tag::query()
+            ->select('id','name','parent_id','created_by','updated_by')
+            // load this tag’s creator & updater...
+            ->with(['creator','updater'])
+            // ...and also load its parent, plus the parent’s creator & updater
+            ->with([
+                'parent' => function($q) {
+                    $q->select('id','name','parent_id','created_by','updated_by')
+                        ->with(['creator','updater'])
+                    ->withCount('allChildren as children_count');
+                }
+            ])
+            // count all recursive descendants
+            ->withCount(['allChildren as children_count']);
+
+        // 2) Optional name filter
+        // if (!empty(trim($validated['name']))) {
+        //     $query->where('name', 'ILIKE', "%{$validated['name']}%");
+        // }
+
+        // 3) Meta
+        $totalCount = $query->count();
+        $totalPages = (int) ceil($totalCount / $perPage);
+
+        // 4) Pagination + fetch
+        $tags = $query
+            ->forPage($page, $perPage)
+            ->get();
+
+        $tags->makeHidden(['created_by','updated_by','parent_id']);
+
+        // If you loaded a 'parent' relation, hide them there too
+        $tags->each(function($tag) {
+            if ($tag->creator) {
+                $tag->creator->makeHidden(['created_at','updated_at','deleted_at']);
+            }
+
+            if ($tag->updater) {
+                $tag->updater->makeHidden(['created_at','updated_at','deleted_at']);
+            }
+
+            if ($tag->parent) {
+                $tag->parent->makeHidden(['created_by','updated_by','parent_id']);
+                $tag->parent->creator->makeHidden(['created_at','updated_at','deleted_at']);
+                $tag->parent->updater->makeHidden(['created_at','updated_at','deleted_at']);
+            }
+        });
+
+        // 5) Return
+        return $this->apiSuccess([
+            'meta' => [
+                'total_count'  => $totalCount,
+                'total_pages'  => $totalPages,
+                'current_page' => $page,
+                'page_size'    => $perPage,
+            ],
+            'result' => $tags,
+        ], 'Tags retrieved successfully');
+    }
+
 
     /**
      * Recursively set ayahs as an empty array for all children if not already set.

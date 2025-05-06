@@ -7,7 +7,8 @@ Route::prefix('tags')->group(function () {
     Route::get('/', [TagController::class, 'index']);
     Route::post('/', [TagController::class, 'store'])->middleware('auth:sanctum');
     Route::get('/unapproved', [TagController::class, 'getUnapprovedTags'])->middleware('auth:sanctum');
-    Route::get('/tags_search', [TagController::class, 'searchTags']);
+    Route::get('/search', [TagController::class, 'searchTags']);
+    Route::get('/dashboard', [TagController::class, 'tagsDashboard'])->middleware(['auth:sanctum', 'role:superadmin,admin']);
     Route::get('/{tag}', [TagController::class, 'show']);
     Route::put('/{tag}', [TagController::class, 'update'])->middleware('auth:sanctum');
     Route::delete('/{tag}', [TagController::class, 'destroy'])->middleware('auth:sanctum');
