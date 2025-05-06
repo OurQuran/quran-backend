@@ -5,7 +5,6 @@ use App\Http\Controllers\UserController;
 
 Route::prefix('users')->group(function () {
     Route::middleware(['auth:sanctum'])->group(function () {
-        Route::delete('/', [UserController::class, 'deleteAccount']);
         Route::post("/change_password", [UserController::class, 'changeOwnPassword']);
 
         Route::middleware(['role:superadmin'])->group(function () {

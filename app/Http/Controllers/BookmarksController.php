@@ -26,15 +26,20 @@ class BookmarksController extends Controller
                 ->join('ayahs', 'ayahs.id', '=', 'bookmarks.ayah_id')
                 ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
                 ->select(
-                    'bookmarks.id as bookmark_id',
                     'surahs.id as surah_id',
-                    'surahs.name_en as surah_name', // Include surah_name directly
-                    'ayahs.id as ayah_id', // Alias to avoid ambiguity
+                    'surahs.name_en as surah_name_en',
+                    'surahs.name_ar as surah_name_ar',
+                    'ayahs.id as ayah_id',
                     'ayahs.text as ayah_text',
                     'ayahs.number_in_surah as number_in_surah',
-                    'bookmarks.created_at as created_at',
+                    'ayahs.page',
+                    'ayahs.juz_id',
+                    'ayahs.hizb_id',
+                    'ayahs.sajda',
+                    'ayahs.ayah_template',
+                    'ayahs.pure_text',
                 )
-                ->orderBy('ayah_id');
+                ->orderBy('created_at', 'desc');
 
             $totalCount = $bookmarksQuery->count();
             $totalPages = ceil($totalCount / $perPage);
@@ -43,16 +48,34 @@ class BookmarksController extends Controller
                 ->take($perPage)
                 ->get();
 
+            // Get the current authenticated user
+            $user = Auth::user();
+
             // Prepare final response as a flat array
-            $formattedBookmarks = $bookmarks->map(function ($item) {
+            $formattedBookmarks = $bookmarks->map(function ($item) use ($user) {
+                // Get tags for this ayah
+                $ayah = Ayah::find($item->ayah_id);
+                $tags = $this->getTagsForAyah($ayah, $user);
+
                 return [
-                    'bookmark_id' => $item->bookmark_id,
                     'surah_id' => $item->surah_id,
-                    'surah_name' => $item->surah_name, // Flattened field for surah_name
+                    'surah_name_ar' => $item->surah_name_ar,
+                    'surah_name_en' => $item->surah_name_en,
                     'ayah_id' => $item->ayah_id,
                     'ayah_text' => $item->ayah_text,
                     'number_in_surah' => $item->number_in_surah,
-                    'created_at' => $item->created_at,
+                    'page' => $item->page,
+                    'juz_id' => $item->juz_id,
+                    'hizb_id' => $item->hizb_id,
+                    'sajda' => $item->sajda,
+                    'ayah_template' => $item->ayah_template,
+                    'pure_text' => $item->pure_text,
+                    'tags' => $tags->map(function ($tag) {
+                        return [
+                            'id' => $tag->id,
+                            'name' => $tag->name
+                        ];
+                    })
                 ];
             });
 
@@ -66,8 +89,53 @@ class BookmarksController extends Controller
                 'result' => $formattedBookmarks
             ], 'Bookmarks retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError('Failed to retrieve Bookmarks');
+            return $this->apiError('Failed to retrieve Bookmarks: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Get tags for a specific ayah based on user permissions
+     *
+     * @param \App\Models\Ayah $ayah
+     * @param \App\Models\User|null $user
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    private function getTagsForAyah($ayah, $user = null)
+    {
+        $tagsQuery = $ayah->tags()->select(
+            'tags.id',
+            'tags.name'
+        );
+
+        // If user is admin or superadmin, they can see all tags
+        if ($user && in_array($user->role, ['admin', 'superadmin'])) {
+            // No additional filters - admins see everything
+        }
+        // Regular users see:
+        // 1. Their own tags (approved or not)
+        // 2. Admin/superadmin created tags (whether approved or not)
+        // 3. Approved tags (by any user)
+        else {
+            $tagsQuery->where(function($query) use ($user) {
+                // Admin/superadmin created tags (all of them)
+                $query->whereExists(function($subquery) {
+                    $subquery->select(\DB::raw(1))
+                        ->from('users')
+                        ->whereColumn('users.id', '=', 'ayah_tags.created_by')
+                        ->whereIn('users.role', ['admin', 'superadmin']);
+                });
+
+                // If user is logged in, also include their own tags
+                if ($user) {
+                    $query->orWhere('ayah_tags.created_by', $user->id);
+                }
+
+                // Tags approved by anyone
+                $query->orWhereNotNull('ayah_tags.approved_by');
+            });
+        }
+
+        return $tagsQuery->get();
     }
 
     public function create(Request $request)
