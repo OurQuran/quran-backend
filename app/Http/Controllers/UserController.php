@@ -190,8 +190,16 @@ class UserController extends Controller
         return $this->apiSuccess(null, "Logged out successfully");
     }
 
-    public function deleteAccount()
+    public function deleteAccount(Request $request)
     {
+        $validated = $request->validate([
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        if (!Hash::check($validated['password'], Auth::user()->getAuthPassword())) {
+            return $this->apiError("Password doesn't match current password");
+        }
+
         User::query()
             ->where('id', Auth::id())
             ->whereNot('role', 'superadmin')

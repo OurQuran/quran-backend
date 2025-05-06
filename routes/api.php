@@ -13,7 +13,7 @@ Route::post('/signup', [UserController::class, 'signup']);
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/logout', [UserController::class, 'logout'])->middleware('auth:sanctum');
 Route::get('/me', [UserController::class, 'me'])->middleware('auth:sanctum');
-Route::delete('/me', [UserController::class, 'deleteAccount'])->middleware('auth:sanctum');
+Route::post('/me', [UserController::class, 'deleteAccount'])->middleware('auth:sanctum');
 
 Route::post('/tags-scrape', [TagController::class, 'scrape']);
 Route::post('/tags-scrape-array', [TagController::class, 'scrapeArray']);
