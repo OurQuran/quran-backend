@@ -58,10 +58,10 @@ class BookmarksController extends Controller
                 $tags = $this->getTagsForAyah($ayah, $user);
 
                 return [
+                    'id' => $item->ayah_id,
                     'surah_id' => $item->surah_id,
                     'surah_name_ar' => $item->surah_name_ar,
                     'surah_name_en' => $item->surah_name_en,
-                    'ayah_id' => $item->ayah_id,
                     'ayah_text' => $item->ayah_text,
                     'number_in_surah' => $item->number_in_surah,
                     'page' => $item->page,
