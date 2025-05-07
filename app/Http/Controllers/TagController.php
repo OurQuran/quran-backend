@@ -88,18 +88,30 @@ class TagController extends Controller
 
     public function show(Tag $tag)
     {
+        $user = $this->checkLoginToken();
+
         $tag->load([
             'allChildren' => function ($query) {
                 $query->with('allChildren');
             },
             'ayahs.tags' => function ($query) {
                 $query->select('tags.id', 'tags.name');
-            }
+            },
         ]);
 
-        $tag->ayahs->each(function ($ayah) {
+        // Optionally preload bookmarks if user is logged in
+        if ($user) {
+            $tag->ayahs->load(['bookmarks' => function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            }]);
+        }
+
+        $tag->ayahs->each(function ($ayah) use ($user) {
             $ayah->makeHidden('pivot');
             $ayah->tags = $ayah->tags->makeHidden('pivot');
+
+            $ayah->bookmarked = $user && $ayah->bookmarks->isNotEmpty();
+            $ayah->makeHidden('bookmarks');
         });
 
         if (!$tag->relationLoaded('ayahs') || $tag->ayahs->isEmpty()) {
@@ -110,7 +122,6 @@ class TagController extends Controller
 
         return $this->apiSuccess($tag, 'Tag retrieved successfully');
     }
-
 
     public function update(Request $request, Tag $tag)
     {

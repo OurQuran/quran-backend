@@ -76,4 +76,9 @@ class Ayah extends Model
 					->withPivot('id', 'data', 'is_audio')
 					->withTimestamps();
 	}
+
+    public function bookmarks()
+    {
+        return $this->hasMany(Bookmark::class, 'ayah_id', 'id');
+    }
 }

@@ -70,6 +70,7 @@ class BookmarksController extends Controller
                     'sajda' => $item->sajda,
                     'ayah_template' => $item->ayah_template,
                     'pure_text' => $item->pure_text,
+                    'bookmarked' => true,
                     'tags' => $tags->map(function ($tag) {
                         return [
                             'id' => $tag->id,
