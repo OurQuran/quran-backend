@@ -234,10 +234,12 @@ class SurahController extends Controller
     public function search(Request $request)
     {
         $validated = $request->validate([
-            'q'        => 'required|string',
-            'type'     => 'required|string|in:exact,semantic',
-            'page'     => 'sometimes|integer|min:1',
-            'per_page' => 'sometimes|integer|min:1|max:100',
+            'q'             => 'required|string',
+            'type'          => 'required|string|in:exact,semantic',
+            'page'          => 'sometimes|integer|min:1',
+            'per_page'      => 'sometimes|integer|min:1|max:100',
+            'text_edition'  => 'sometimes|integer|exists:editions,id',
+            'audio_edition' => 'sometimes|integer|exists:editions,id',
         ]);
 
         $page    = (int)($validated['page'] ?? 1);
@@ -254,38 +256,32 @@ class SurahController extends Controller
         $ids    = $result->ayah_ids;
         $user   = $this->checkLoginToken();
 
-        // Base query
+        // Base query for ayahs
         $query = Ayah::whereIn('ayahs.id', $ids)
             ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
             ->select(
                 'ayahs.*',
                 'surahs.name_en as surah_name_en',
                 'surahs.name_ar as surah_name_ar'
-            )
-            // Add bookmarked status
-            ->when($user, function($q) use($user) {
-                $q->withExists(['bookmarks as bookmarked' => function($q2) use($user) {
-                    $q2->where('user_id', $user->id);
-                }]);
-            }, function($q) {
-                $q->selectRaw('false as bookmarked');
-            });
+            );
 
-        // count + paginate
+        // Count total results before applying pagination
         $totalCount = $query->count('ayahs.id');
         $totalPages = (int) ceil($totalCount / $perPage);
 
-        $ayahs = $query
-            ->skip(($page - 1) * $perPage)
-            ->take($perPage)
-            ->get();
+        // Apply pagination to the query
+        $query->skip(($page - 1) * $perPage)
+            ->take($perPage);
+
+        // Use filterByVerseAndEdition to add translations and audio
+        $ayahs = $this->filterByVerseAndEdition($validated, $query);
 
         // Load tags with proper filtering for each ayah
         foreach ($ayahs as $ayah) {
             // Get filtered tags based on user role/permissions
             $filteredTags = $this->getTagsForAyah($ayah, $user);
 
-            // Add filtered tags to the ayah as the tags property
+            // Replace the tags property with our filtered tags
             $ayah->tags = $filteredTags->map(function ($tag) {
                 return [
                     'id' => $tag->id,
