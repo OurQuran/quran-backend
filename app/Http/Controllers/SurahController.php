@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use App\Models\Surah;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 class SurahController extends Controller
 {
@@ -228,6 +229,83 @@ class SurahController extends Controller
         } catch (\Exception $e) {
             return $this->apiError("Failed to retrieve Surah");
         }
+    }
+
+    public function search(Request $request)
+    {
+        $validated = $request->validate([
+            'q'        => 'required|string',
+            'type'     => 'required|string|in:exact,semantic',
+            'page'     => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ]);
+
+        $page    = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 20);
+
+        // call out to your AI service
+        $result = Http::post(
+            env('AI_URL') . "/{$validated['type']}_search",
+            ['query' => $validated['q']]
+        );
+
+        $result = $result->body();
+        $result = json_decode($result);
+        $ids    = $result->ayah_ids;
+        $user   = $this->checkLoginToken();
+
+        // Base query
+        $query = Ayah::whereIn('ayahs.id', $ids)
+            ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
+            ->select(
+                'ayahs.*',
+                'surahs.name_en as surah_name_en',
+                'surahs.name_ar as surah_name_ar'
+            )
+            // Add bookmarked status
+            ->when($user, function($q) use($user) {
+                $q->withExists(['bookmarks as bookmarked' => function($q2) use($user) {
+                    $q2->where('user_id', $user->id);
+                }]);
+            }, function($q) {
+                $q->selectRaw('false as bookmarked');
+            });
+
+        // count + paginate
+        $totalCount = $query->count('ayahs.id');
+        $totalPages = (int) ceil($totalCount / $perPage);
+
+        $ayahs = $query
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
+
+        // Load tags with proper filtering for each ayah
+        foreach ($ayahs as $ayah) {
+            // Get filtered tags based on user role/permissions
+            $filteredTags = $this->getTagsForAyah($ayah, $user);
+
+            // Add filtered tags to the ayah as the tags property
+            $ayah->tags = $filteredTags->map(function ($tag) {
+                return [
+                    'id' => $tag->id,
+                    'name' => $tag->name
+                ];
+            });
+
+            // Remove the surah relationship if it was loaded
+            unset($ayah->surah);
+        }
+
+        return $this->apiSuccess([
+            'meta' => [
+                'total_count'  => $totalCount,
+                'total_pages'  => $totalPages,
+                'current_page' => $page,
+                'page_size'    => $perPage,
+            ],
+            'result' => $ayahs,
+        ], 'Search completed.');
     }
 
     /**

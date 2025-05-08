@@ -1,6 +1,7 @@
 <?php
 
 // Automatically include all route files from subroutes folder
+use App\Http\Controllers\SurahController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -19,4 +20,4 @@ Route::post('/tags-scrape', [TagController::class, 'scrape']);
 Route::post('/tags-scrape-array', [TagController::class, 'scrapeArray']);
 Route::post('/untag-array', [TagController::class, 'untagArray']);
 
-Route::get('/search', [TagController::class, 'search']);
+Route::get('/search', [SurahController::class, 'search']);

@@ -598,32 +598,6 @@ class TagController extends Controller
         return $this->apiSuccess($results, 'Untagging completed.');
     }
 
-    // todo
-    public function search(Request $request)
-    {
-        $validated = $request->validate([
-            'q' => 'required|string',
-            'page' => 'sometimes|integer|min:1',
-            'per_page' => 'sometimes|integer|min:1|max:100'
-        ]);
-
-        $page = (int)($validated['page'] ?? 1);
-        $perPage = (int)($validated['per_page'] ?? 20);
-
-        $result = Http::get(env('AI_URL') . '/search?q=' . $validated['q']);
-
-        $result = json_decode($result->body());
-
-        $result = $result->data;
-
-        foreach ($result as $ayah) {
-
-        }
-
-        $ayahs = Ayah::query()->whereIn('id', $result->ayah_id)->get();
-
-        return $this->apiSuccess($result, 'Search completed.');
-    }
 
     public function tagsDashboard(Request $request)
     {
