@@ -84,6 +84,10 @@ class UserController extends Controller
             'role' => 'sometimes|string|in:user,admin'
         ]);
 
+        if ($user->role === 'superadmin' && $validated['role']) {
+            return $this->apiError('This user\'s role cannot be updated', 404);
+        }
+
         if (isset($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         }
