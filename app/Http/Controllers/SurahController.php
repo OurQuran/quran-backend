@@ -90,17 +90,34 @@ class SurahController extends Controller
             $validated = $request->validatedWithDefaults();
             $user = $this->checkLoginToken();
 
-            // Base query for Ayahs
+            // Get pagination parameters from validated data
+            $pageNum = (int)$validated['page']; // renamed to avoid confusion with page parameter
+            $perPage = (int)$validated['per_page'];
+
+            // Base query for counting total Ayahs on this page
+            $countQuery = Ayah::query()
+                ->where('page', $page);
+
+            // Get total count for pagination metadata
+            $totalCount = $countQuery->count();
+
+            if ($totalCount === 0) {
+                return $this->apiError('Invalid page number or no matching Ayahs', 404);
+            }
+
+            // Apply pagination to the query
             $ayahsQuery = Ayah::query()
                 ->where('page', $page)
                 ->orderBy('surah_id')
                 ->orderBy('page')
-                ->orderBy('number_in_surah');
+                ->orderBy('number_in_surah')
+                ->skip(($pageNum - 1) * $perPage)
+                ->take($perPage);
 
             // Filter by verse and apply default edition logic
             $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery);
 
-            if ($ayahs->isEmpty()) {
+            if ($ayahs->isEmpty() && $pageNum == 1) {
                 return $this->apiError('Invalid page number or no matching Ayahs', 404);
             }
 
@@ -110,24 +127,38 @@ class SurahController extends Controller
 
             // Attach tags to each Ayah
             $modifiedAyahs = collect();
-            foreach ($ayahs as $ayah) {
-                if ($ayah->number_in_surah == 1 && $ayah->surah_id != 1 && $ayah->surah_id != 9) {
-                    $bismillahRow->surah_id = $ayah->surah_id;
-                    $bismillahRow->number_in_surah = 0;
 
-                    // Fetch and attach tags for Bismillah row
-                    $bismillahRow->tags = $this->getTagsForAyah($bismillahRow, $user);
-                    $modifiedAyahs->push($bismillahRow);
+            if ($ayahs->isNotEmpty()) {
+                foreach ($ayahs as $ayah) {
+                    if ($ayah->number_in_surah == 1 && $ayah->surah_id != 1 && $ayah->surah_id != 9) {
+                        $bismillahRow->surah_id = $ayah->surah_id;
+                        $bismillahRow->number_in_surah = 0;
+
+                        // Fetch and attach tags for Bismillah row
+                        $bismillahRow->tags = $this->getTagsForAyah($bismillahRow, $user);
+                        $modifiedAyahs->push($bismillahRow);
+                    }
+
+                    // Fetch and attach tags for the current Ayah
+                    $ayah->tags = $this->getTagsForAyah($ayah, $user);
+                    $modifiedAyahs->push($ayah);
                 }
-
-                // Fetch and attach tags for the current Ayah
-                $ayah->tags = $this->getTagsForAyah($ayah, $user);
-                $modifiedAyahs->push($ayah);
             }
 
-            return $this->apiSuccess($modifiedAyahs, 'Page retrieved successfully');
+            // Calculate total pages
+            $totalPages = ceil($totalCount / $perPage);
+
+            return $this->apiSuccess([
+                'meta' => [
+                    'total_count' => $totalCount,
+                    'total_pages' => $totalPages,
+                    'current_page' => $pageNum,
+                    'per_page' => $perPage
+                ],
+                'ayahs' => $modifiedAyahs
+            ], 'Page retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError('Failed to retrieve page');
+            return $this->apiError('Failed to retrieve page: ' . $e->getMessage());
         }
     }
 
@@ -137,17 +168,35 @@ class SurahController extends Controller
             $validated = $request->validatedWithDefaults();
             $user = $this->checkLoginToken();
 
-            // Base query for Ayahs
+            // Get pagination parameters from validated data
+            $page = (int)$validated['page'];
+            $perPage = (int)$validated['per_page'];
+
+            // Base query for Ayahs to get total count
+            $countQuery = Ayah::query()
+                ->where('juz_id', $juz);
+
+            // Get total count for pagination metadata
+            $totalCount = $countQuery->count();
+
+            // If there are no results, return error
+            if ($totalCount === 0) {
+                return $this->apiError('Invalid Juz number or no matching Ayahs', 404);
+            }
+
+            // Apply pagination to the query
             $ayahsQuery = Ayah::query()
                 ->where('juz_id', $juz)
                 ->orderBy('surah_id')
                 ->orderBy('juz_id')
-                ->orderBy('number_in_surah');
+                ->orderBy('number_in_surah')
+                ->skip(($page - 1) * $perPage)
+                ->take($perPage);
 
             // Filter by verse and apply edition logic
             $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery);
 
-            if ($ayahs->isEmpty()) {
+            if ($ayahs->isEmpty() && $page == 1) {
                 return $this->apiError('Invalid Juz number or no matching Ayahs', 404);
             }
 
@@ -157,29 +206,44 @@ class SurahController extends Controller
 
             // Process the ayahs collection to insert Bismillah before the first ayah of each new surah (except surah 9)
             $modifiedAyahs = collect();
-            $currentSurah = $ayahs[0]->surah_id;
 
-            foreach ($ayahs as $ayah) {
-                if ($ayah->surah_id !== $currentSurah) {
-                    $currentSurah = $ayah->surah_id;
-                    if ($currentSurah != 9) {
-                        $bismillahRow->surah_id = $currentSurah;
-                        $bismillahRow->number_in_surah = 0;
+            // Only set currentSurah if we have ayahs
+            if ($ayahs->isNotEmpty()) {
+                $currentSurah = $ayahs[0]->surah_id;
 
-                        // Fetch and attach tags for Bismillah row (Hides pivot)
-                        $bismillahRow->tags = $this->getTagsForAyah($bismillahRow, $user);
-                        $modifiedAyahs->push($bismillahRow);
+                foreach ($ayahs as $ayah) {
+                    if ($ayah->surah_id !== $currentSurah) {
+                        $currentSurah = $ayah->surah_id;
+                        if ($currentSurah != 9) {
+                            $bismillahRow->surah_id = $currentSurah;
+                            $bismillahRow->number_in_surah = 0;
+
+                            // Fetch and attach tags for Bismillah row
+                            $bismillahRow->tags = $this->getTagsForAyah($bismillahRow, $user);
+                            $modifiedAyahs->push($bismillahRow);
+                        }
                     }
-                }
 
-                // Fetch and attach tags for the current Ayah (Hides pivot)
-                $ayah->tags = $this->getTagsForAyah($ayah, $user);
-                $modifiedAyahs->push($ayah);
+                    // Fetch and attach tags for the current Ayah
+                    $ayah->tags = $this->getTagsForAyah($ayah, $user);
+                    $modifiedAyahs->push($ayah);
+                }
             }
 
-            return $this->apiSuccess($modifiedAyahs, 'Juz retrieved successfully');
+            // Calculate total pages
+            $totalPages = ceil($totalCount / $perPage);
+
+            return $this->apiSuccess([
+                'meta' => [
+                    'total_count' => $totalCount,
+                    'total_pages' => $totalPages,
+                    'current_page' => $page,
+                    'per_page' => $perPage
+                ],
+                'ayahs' => $modifiedAyahs
+            ], 'Juz retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError("Failed to retrieve Juz");
+            return $this->apiError("Failed to retrieve Juz: " . $e->getMessage());
         }
     }
 
@@ -188,6 +252,10 @@ class SurahController extends Controller
             $validated = $request->validatedWithDefaults();
             $user = $this->checkLoginToken();
 
+            // Get pagination parameters from validated data
+            $page = (int)$validated['page'];
+            $perPage = (int)$validated['per_page'];
+
             // 1. Base query
             $ayahsQuery = Ayah::query()
                 ->where('ayahs.surah_id', $surah)
@@ -195,17 +263,29 @@ class SurahController extends Controller
                 ->orderBy('ayahs.page')
                 ->orderBy('ayahs.number_in_surah');
 
-            // 2. Apply filters and editions
+            // Get total count for pagination metadata
+            $totalCount = $ayahsQuery->count();
+
+            // 2. Apply filters and get paginated results
+            // Note: We need to apply pagination before getting the results
+            $ayahsQuery = Ayah::query()
+                ->where('ayahs.surah_id', $surah)
+                ->orderBy('ayahs.juz_id')
+                ->orderBy('ayahs.page')
+                ->orderBy('ayahs.number_in_surah')
+                ->skip(($page - 1) * $perPage)
+                ->take($perPage);
+
             $ayahs = $this->filterByVerseAndEdition($validated, $ayahsQuery);
 
-            if ($ayahs->isEmpty()) {
+            if ($ayahs->isEmpty() && $page == 1) {
                 return $this->apiError('Invalid Surah number or no matching Ayahs', 404);
             }
 
-            // 3. Fetch and prepare Bismillah if needed
+            // 3. Fetch and prepare Bismillah if needed (only for first page)
             $modifiedAyahs = collect();
 
-            if ($surah !== 1 && $surah !== 9) {
+            if ($page == 1 && $surah !== 1 && $surah !== 9) {
                 $bismillahQuery = Ayah::query()->where('ayahs.id', 1);
                 $bismillahRow = $this->filterByVerseAndEdition($validated, $bismillahQuery)->first();
 
@@ -225,9 +305,20 @@ class SurahController extends Controller
                 $modifiedAyahs->push($ayah);
             }
 
-            return $this->apiSuccess($modifiedAyahs, 'Surah retrieved successfully');
+            // Calculate total pages
+            $totalPages = ceil($totalCount / $perPage);
+
+            return $this->apiSuccess([
+                'meta' => [
+                    'total_count' => $totalCount,
+                    'total_pages' => $totalPages,
+                    'current_page' => $page,
+                    'per_page' => $perPage
+                ],
+                'ayahs' => $modifiedAyahs
+            ], 'Surah retrieved successfully');
         } catch (\Exception $e) {
-            return $this->apiError("Failed to retrieve Surah");
+            return $this->apiError("Failed to retrieve Surah: " . $e->getMessage());
         }
     }
 

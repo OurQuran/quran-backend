@@ -24,6 +24,8 @@ class SurahRequest extends FormRequest
                 'sometimes', 'integer', 'min:1', 'nullable',
                 Rule::exists('editions', 'id')->where('format', 'audio')
             ],
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100',
         ];
     }
 
@@ -32,6 +34,8 @@ class SurahRequest extends FormRequest
         $validated = $this->validated();
         $validated['text_edition'] = $validated['text_edition'] ?? 1;
         $validated['audio_edition'] = $validated['audio_edition'] ?? 106;
+        $validated['page'] = $validated['page'] ?? 1;
+        $validated['per_page'] = $validated['per_page'] ?? 20;
 
         return $validated;
     }
