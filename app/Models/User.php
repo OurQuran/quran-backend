@@ -22,6 +22,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  * @property string|null $remember_token
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property string $role
  *
  * @property Collection|Tag[] $tags
  * @property Collection|AyahTag[] $ayah_tags

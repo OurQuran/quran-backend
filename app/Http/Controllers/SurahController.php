@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Requests\SurahRequest;
 use App\Models\Ayah;
 use App\Models\Edition;
+use App\Models\User;
+use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\Surah;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +17,7 @@ use Illuminate\Support\Facades\Http;
 
 class SurahController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         try {
             $validated = $request->validate([
@@ -79,12 +82,12 @@ class SurahController extends Controller
             $surahs = $query->orderBy('surahs.id')->get();
 
             return $this->apiSuccess($surahs, 'Surahs retrieved successfully');
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return $this->apiError("Failed to retrieve Surahs: " . $e->getMessage());
         }
     }
 
-    public function getByPage(SurahRequest $request, int $page)
+    public function getByPage(SurahRequest $request, int $page): JsonResponse
     {
         try {
             $validated = $request->validatedWithDefaults();
@@ -157,12 +160,12 @@ class SurahController extends Controller
                 ],
                 'ayahs' => $modifiedAyahs
             ], 'Page retrieved successfully');
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return $this->apiError('Failed to retrieve page: ' . $e->getMessage());
         }
     }
 
-    public function getByJuz(SurahRequest $request, int $juz)
+    public function getByJuz(SurahRequest $request, int $juz): JsonResponse
     {
         try {
             $validated = $request->validatedWithDefaults();
@@ -242,12 +245,13 @@ class SurahController extends Controller
                 ],
                 'ayahs' => $modifiedAyahs
             ], 'Juz retrieved successfully');
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return $this->apiError("Failed to retrieve Juz: " . $e->getMessage());
         }
     }
 
-    public function getBySurah(SurahRequest $request, int $surah) {
+    public function getBySurah(SurahRequest $request, int $surah): JsonResponse
+    {
         try {
             $validated = $request->validatedWithDefaults();
             $user = $this->checkLoginToken();
@@ -317,23 +321,23 @@ class SurahController extends Controller
                 ],
                 'ayahs' => $modifiedAyahs
             ], 'Surah retrieved successfully');
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return $this->apiError("Failed to retrieve Surah: " . $e->getMessage());
         }
     }
 
-    public function search(Request $request)
+    public function search(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'q'             => 'required|string',
-            'type'          => 'required|string|in:exact,semantic',
-            'page'          => 'sometimes|integer|min:1',
-            'per_page'      => 'sometimes|integer|min:1|max:100',
-            'text_edition'  => 'sometimes|integer|exists:editions,id',
+            'q' => 'required|string',
+            'type' => 'required|string|in:exact,semantic',
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'text_edition' => 'sometimes|integer|exists:editions,id',
             'audio_edition' => 'sometimes|integer|exists:editions,id',
         ]);
 
-        $page    = (int)($validated['page'] ?? 1);
+        $page = (int)($validated['page'] ?? 1);
         $perPage = (int)($validated['per_page'] ?? 20);
 
         // call out to your AI service
@@ -344,11 +348,11 @@ class SurahController extends Controller
 
         $result = $result->body();
         $result = json_decode($result);
-        $ids    = $result->ayah_ids;
-        $user   = $this->checkLoginToken();
+        $ids = $result->ayah_ids;
+        $user = $this->checkLoginToken();
 
         // Base query for ayahs
-        $query = Ayah::whereIn('ayahs.id', $ids)
+        $query = Ayah::query()->whereIn('ayahs.id', $ids)
             ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
             ->select(
                 'ayahs.*',
@@ -358,7 +362,7 @@ class SurahController extends Controller
 
         // Count total results before applying pagination
         $totalCount = $query->count('ayahs.id');
-        $totalPages = (int) ceil($totalCount / $perPage);
+        $totalPages = (int)ceil($totalCount / $perPage);
 
         // Apply pagination to the query
         $query->skip(($page - 1) * $perPage)
@@ -386,10 +390,10 @@ class SurahController extends Controller
 
         return $this->apiSuccess([
             'meta' => [
-                'total_count'  => $totalCount,
-                'total_pages'  => $totalPages,
+                'total_count' => $totalCount,
+                'total_pages' => $totalPages,
                 'current_page' => $page,
-                'page_size'    => $perPage,
+                'page_size' => $perPage,
             ],
             'result' => $ayahs,
         ], 'Search completed.');
@@ -400,9 +404,9 @@ class SurahController extends Controller
      *
      * @param Ayah $ayah
      * @param User|null $user
-     * @return \Illuminate\Database\Eloquent\Collection
+     * @return Collection
      */
-    private function getTagsForAyah($ayah, $user = null)
+    private function getTagsForAyah(Ayah $ayah, User $user = null): Collection
     {
         $tagsQuery = $ayah->tags()->select(
             'tags.id',
@@ -420,10 +424,10 @@ class SurahController extends Controller
         // 2. Admin/superadmin created tags (whether approved or not)
         // 3. Approved tags (by any user)
         else {
-            $tagsQuery->where(function($query) use ($user) {
+            $tagsQuery->where(function ($query) use ($user) {
                 // Admin/superadmin created tags (all of them)
-                $query->whereExists(function($subquery) {
-                    $subquery->select(\DB::raw(1))
+                $query->whereExists(function ($subquery) {
+                    $subquery->select(DB::raw(1))
                         ->from('users')
                         ->whereColumn('users.id', '=', 'tags.created_by')
                         ->whereIn('users.role', ['admin', 'superadmin']);
@@ -444,7 +448,8 @@ class SurahController extends Controller
 
 
     // ayah-surah/1 (for bookmarks)
-    public function getSurahByAyah(Request $request, int $ayah){
+    public function getSurahByAyah(Request $request, int $ayah): JsonResponse
+    {
         try {
             $ayah = Ayah::query()->findOrFail($ayah);
 
@@ -454,17 +459,18 @@ class SurahController extends Controller
                 ->get();
 
             return $this->apiSuccess($surah, 'Surah retrieved successfully');
-        } catch (\Exception $e){
+        } catch (Exception $e) {
             return $this->apiError('Failed to retrieve Surah by Ayah');
         }
     }
 
-    public function editions(){
+    public function editions(): JsonResponse
+    {
         try {
             $editions = Edition::query()->get();
 
             return $this->apiSuccess($editions, 'Editions retrieved successfully');
-        } catch (\Exception $e){
+        } catch (Exception $e) {
             return $this->apiError('Failed to retrieve editions');
         }
     }

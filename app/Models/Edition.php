@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $identifier
  * @property string $language
  * @property string $name
- * @property string $englishName
+ * @property string $english_name
  * @property string $format
  * @property string $type
  * @property Carbon|null $created_at
@@ -35,7 +35,7 @@ class Edition extends Model
 		'identifier',
 		'language',
 		'name',
-		'englishName',
+		'english_name',
 		'format',
 		'type'
 	];
