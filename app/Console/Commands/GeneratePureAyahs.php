@@ -59,6 +59,9 @@ class GeneratePureAyahs extends Command
         // Replace Alef Wasla (ٱ) with a normal Alef (ا)
         $text = str_replace(['ٱ'], ['ا'], $text);
 
+        // ✅ Minimal: normalize madd/hamza alef forms to plain alef for pure text
+        $text = str_replace(['آ','أ','إ'], ['ا','ا','ا'], $text);
+
         // Define a comprehensive pattern to match all Arabic diacritics and Quranic symbols
         $pattern = '/[' .
             // Arabic Tashkeel (diacritics)
@@ -122,6 +125,7 @@ class GeneratePureAyahs extends Command
             'ۡ',   // Small Dotless Head of Khah (U+06E1)
             'ۢ',   // Small Meem (U+06E2)
             'ۤ',   // Small High Madda (U+06E4)
+            'ٓ', // Maddah Above (U+0653)
             'ۥ',   // Small Waw (U+06E5)
             'ۦ',   // Small Yeh (U+06E6)
             'ۧ',   // Small High Yeh (U+06E7)
