@@ -9,15 +9,16 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('qiraat_differences', function (Blueprint $table) {
-            $table->bigIncrements('id');
+            $table->id();
 
             $table->unsignedBigInteger('qiraat_reading_id'); // which qiraat (Warsh/Qalun/etc)
             $table->unsignedBigInteger('ayah_id'); // which ayah this difference belongs to
             $table->unsignedBigInteger('start_word_id'); // first word affected (FK -> words.id)
             $table->unsignedBigInteger('end_word_id'); // last word affected (FK -> words.id). For single word: same as start_word_id
 
-            $table->text('qiraat_text'); // the qiraat word/phrase (Warsh form)
-            $table->text('options_text'); // "Qiraa Options" (store as text; can be same as qiraat_text if only one)
+            $table->text('hafs_text'); // the qiraat word/phrase (Warsh form)
+            $table->text('qiraat_options'); // the options separated by the comma
+            $table->text('qiraat_text')->nullable(); // "Qiraa text" (store as text; can be same as qiraat_text if only one)
             $table->text('explanation')->nullable(); // explanation/notes (nullable because sometimes empty)
 
             $table->timestamps();

@@ -12,13 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('qiraat_readings', function (Blueprint $table) {
-            $table->bigIncrements('id');
+            $table->id();
             $table->text('imam'); // e.g. Nafi'
             $table->text('riwaya'); // e.g. Warsh
-            $table->text('rawi')->nullable(); // optional
             $table->text('name'); // display name
-
-            $table->timestamps();
         });
     }
 
