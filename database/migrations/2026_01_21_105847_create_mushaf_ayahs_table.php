@@ -12,29 +12,22 @@ return new class extends Migration
             $table->id();
 
             $table->unsignedBigInteger('qiraat_reading_id')->nullable();
-            $table->unsignedBigInteger('ayah_id')->nullable(); // base ayah anchor
 
             $table->text('text');
-
-            // metadata (copied from base ayahs or from dataset if you trust it)
-            $table->integer('surah_id')->nullable();
             $table->integer('number_in_surah')->nullable();
             $table->integer('page')->nullable();
+            $table->integer('surah_id')->nullable();
             $table->integer('hizb_id')->nullable();
             $table->integer('juz_id')->nullable();
             $table->boolean('sajda')->nullable();
-
-            $table->timestamps();
+            $table->text('ayah_template')->nullable();
+            $table->text('pure_text')->nullable();
 
             $table->unique(['qiraat_reading_id', 'surah_id', 'number_in_surah'], 'mushaf_ayahs_qiraat_surah_ayah_unique');
             $table->index(['qiraat_reading_id', 'surah_id', 'number_in_surah']);
 
             $table->foreign('qiraat_reading_id')
                 ->references('id')->on('qiraat_readings')
-                ->onDelete('cascade');
-
-            $table->foreign('ayah_id')
-                ->references('id')->on('ayahs')
                 ->onDelete('cascade');
         });
     }
