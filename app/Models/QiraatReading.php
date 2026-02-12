@@ -6,6 +6,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 
@@ -13,20 +14,12 @@ use Illuminate\Database\Eloquent\Model;
  * Class Ayah
  *
  * @property int $id
- * @property int $number
- * @property string $text
- * @property int $number_in_surah
- * @property int $page
- * @property int $surah_id
- * @property int $hizb_id
- * @property int $juz_id
- * @property int $sajda
- * @property string|null $ayah_template
+ * @property string $imam
+ * @property string $riwaya
+ * @property string $name
  *
  * @property Surah $surah
- * @property Collection|Tag[] $tags
- * @property Collection|Word[] $words
- * @property Collection|Edition[] $editions
+ * @property Collection|MushafAyah[] $ayahs
  *
  * @package App\Models
  */
@@ -38,24 +31,20 @@ class QiraatReading extends Model
 
 	protected $casts = [
         'id' => 'int',
-		'imam' => 'string',
-		'riwaya' => 'string',
-		'rawi' => 'string',
-		'name' => 'string',
+        'imam'   => AsArrayObject::class,
+        'riwaya' => AsArrayObject::class,
+        'name'   => AsArrayObject::class,
 	];
 
 	protected $fillable = [
         'imam',
         'riwaya',
-        'rawi',
         'name',
 	];
 
-	public function editions()
-	{
-		return $this->belongsToMany(Edition::class)
-					->withPivot('id', 'data', 'is_audio')
-					->withTimestamps();
-	}
+    public function editions()
+    {
+        return $this->hasMany(Edition::class, 'qiraat_reading_id');
+    }
 
 }

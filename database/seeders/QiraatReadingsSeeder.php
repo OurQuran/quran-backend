@@ -9,64 +9,83 @@ class QiraatReadingsSeeder extends Seeder
 {
     public function run(): void
     {
-        // One-time normalization for your existing data
-        DB::table('qiraat_readings')
-            ->where('imam', 'Nafi')
-            ->where('riwaya', 'Qaloon')
-            ->update([
-                'riwaya' => 'Qalun',
-                'name'   => "Qalun 'an Nafi",
-            ]);
-
         $rows = [
-            // 1) Nafi
-            ['imam' => "Nafi", 'riwaya' => "Warsh", 'name' => "Warsh 'an Nafi"],
-            ['imam' => "Nafi", 'riwaya' => "Qalun", 'name' => "Qalun 'an Nafi"],
+            // 1) Nafi'
+            $this->formatRow(['en' => 'Nafi', 'ar' => 'نافع', 'ku' => 'نافیع'], ['en' => 'Warsh', 'ar' => 'ورش', 'ku' => 'وەرش']),
+            $this->formatRow(['en' => 'Nafi', 'ar' => 'نافع', 'ku' => 'نافیع'], ['en' => 'Qalun', 'ar' => 'قالون', 'ku' => 'قالوون']),
 
             // 2) Ibn Kathir
-            ['imam' => "Ibn Kathir", 'riwaya' => "Al-Bazzi", 'name' => "Al-Bazzi 'an Ibn Kathir"],
-            ['imam' => "Ibn Kathir", 'riwaya' => "Qunbul",   'name' => "Qunbul 'an Ibn Kathir"],
+            $this->formatRow(['en' => 'Ibn Kathir', 'ar' => 'ابن كثير', 'ku' => 'ئیبن کەسیر'], ['en' => 'Al-Bazzi', 'ar' => 'البزي', 'ku' => 'بەزی']),
+            $this->formatRow(['en' => 'Ibn Kathir', 'ar' => 'ابن كثير', 'ku' => 'ئیبن کەسیر'], ['en' => 'Qunbul', 'ar' => 'قنبل', 'ku' => 'قونبول']),
 
             // 3) Abu Amr
-            ['imam' => "Abu Amr", 'riwaya' => "Ad-Duri", 'name' => "Ad-Duri 'an Abu Amr"],
-            ['imam' => "Abu Amr", 'riwaya' => "As-Susi", 'name' => "As-Susi 'an Abu Amr"],
+            $this->formatRow(['en' => 'Abu Amr', 'ar' => 'أبو عمرو', 'ku' => 'ئەبو عەمر'], ['en' => 'Ad-Duri', 'ar' => 'الدوري', 'ku' => 'دووری']),
+            $this->formatRow(['en' => 'Abu Amr', 'ar' => 'أبو عمرو', 'ku' => 'ئەبو عەمر'], ['en' => 'As-Susi', 'ar' => 'السوسي', 'ku' => 'سووسی']),
 
             // 4) Ibn Amir
-            ['imam' => "Ibn Amir", 'riwaya' => "Hisham",      'name' => "Hisham 'an Ibn Amir"],
-            ['imam' => "Ibn Amir", 'riwaya' => "Ibn Dhakwan", 'name' => "Ibn Dhakwan 'an Ibn Amir"],
+            $this->formatRow(['en' => 'Ibn Amir', 'ar' => 'ابن عامر', 'ku' => 'ئیبن عامیر'], ['en' => 'Hisham', 'ar' => 'هشام', 'ku' => 'هیشام']),
+            $this->formatRow(['en' => 'Ibn Amir', 'ar' => 'ابن عامر', 'ku' => 'ئیبن عامیر'], ['en' => 'Ibn Dhakwan', 'ar' => 'ابن ذكوان', 'ku' => 'ئیبن زەکوان']),
 
             // 5) Asim
-            ['imam' => "Asim", 'riwaya' => "Hafs",    'name' => "Hafs 'an Asim"],
-            ['imam' => "Asim", 'riwaya' => "Shu'bah", 'name' => "Shu'bah 'an Asim"],
+            $this->formatRow(['en' => 'Asim', 'ar' => 'عاصم', 'ku' => 'عاسم'], ['en' => 'Hafs', 'ar' => 'حفص', 'ku' => 'حەفس']),
+            $this->formatRow(['en' => 'Asim', 'ar' => 'عاصم', 'ku' => 'عاسم'], ['en' => 'Shu\'bah', 'ar' => 'شعبة', 'ku' => 'شوعبە']),
 
             // 6) Hamzah
-            ['imam' => "Hamzah", 'riwaya' => "Khalaf",  'name' => "Khalaf 'an Hamzah"],
-            ['imam' => "Hamzah", 'riwaya' => "Khallad", 'name' => "Khallad 'an Hamzah"],
+            $this->formatRow(['en' => 'Hamzah', 'ar' => 'حمزة', 'ku' => 'حەمزە'], ['en' => 'Khalaf', 'ar' => 'خلف', 'ku' => 'خەلەف']),
+            $this->formatRow(['en' => 'Hamzah', 'ar' => 'حمزة', 'ku' => 'حەمزە'], ['en' => 'Khallad', 'ar' => 'خلاد', 'ku' => 'خەلاد']),
 
-            // 7) Al-Kisai  (NOTE: Ad-Duri appears here too, that's OK because imam differs)
-            ['imam' => "Al-Kisai", 'riwaya' => "Abu Al-Harith", 'name' => "Abu Al-Harith 'an Al-Kisai"],
-            ['imam' => "Al-Kisai", 'riwaya' => "Ad-Duri",       'name' => "Ad-Duri 'an Al-Kisai"],
+            // 7) Al-Kisai
+            $this->formatRow(['en' => 'Al-Kisai', 'ar' => 'الكسائي', 'ku' => 'کیسائی'], ['en' => 'Abu Al-Harith', 'ar' => 'أبو الحارث', 'ku' => 'ئەبو حارس']),
+            $this->formatRow(['en' => 'Al-Kisai', 'ar' => 'الكسائي', 'ku' => 'کیسائی'], ['en' => 'Ad-Duri', 'ar' => 'الدوري', 'ku' => 'دووری']),
 
             // 8) Abu Ja'far
-            ['imam' => "Abu Ja'far", 'riwaya' => "Ibn Wardan", 'name' => "Ibn Wardan 'an Abu Ja'far"],
-            ['imam' => "Abu Ja'far", 'riwaya' => "Ibn Jammaz", 'name' => "Ibn Jammaz 'an Abu Ja'far"],
+            $this->formatRow(['en' => 'Abu Ja\'far', 'ar' => 'أبو جعفر', 'ku' => 'ئەبو جەعفەر'], ['en' => 'Ibn Wardan', 'ar' => 'ابن وردان', 'ku' => 'ئیبن وەردان']),
+            $this->formatRow(['en' => 'Abu Ja\'far', 'ar' => 'أبو جعفر', 'ku' => 'ئەبو جەعفەر'], ['en' => 'Ibn Jammaz', 'ar' => 'ابن جماز', 'ku' => 'ئیبن جەمماز']),
 
             // 9) Ya'qub
-            ['imam' => "Ya'qub", 'riwaya' => "Ruways", 'name' => "Ruways 'an Ya'qub"],
-            ['imam' => "Ya'qub", 'riwaya' => "Ruh",    'name' => "Ruh 'an Ya'qub"],
+            $this->formatRow(['en' => 'Ya\'qub', 'ar' => 'يعقوب', 'ku' => 'یەعقووب'], ['en' => 'Ruways', 'ar' => 'رويس', 'ku' => 'ڕوەیس']),
+            $this->formatRow(['en' => 'Ya\'qub', 'ar' => 'يعقوب', 'ku' => 'یەعقووب'], ['en' => 'Ruh', 'ar' => 'روح', 'ku' => 'ڕووح']),
 
-            // 10) Khalaf al-'Ashir (10th imam) - keep the imam name explicit to avoid confusion
-            ['imam' => "Khalaf al-'Ashir", 'riwaya' => "Ishaq", 'name' => "Ishaq 'an Khalaf al-'Ashir"],
-            ['imam' => "Khalaf al-'Ashir", 'riwaya' => "Idris", 'name' => "Idris 'an Khalaf al-'Ashir"],
+            // 10) Khalaf al-'Ashir
+            $this->formatRow(['en' => 'Khalaf al-\'Ashir', 'ar' => 'خلف العاشر', 'ku' => 'خەلەفی دەیەم'], ['en' => 'Ishaq', 'ar' => 'إسحاق', 'ku' => 'ئیسحاق']),
+            $this->formatRow(['en' => 'Khalaf al-\'Ashir', 'ar' => 'خلف العاشر', 'ku' => 'خەلەفی دەیەم'], ['en' => 'Idris', 'ar' => 'إدريس', 'ku' => 'ئیدریس']),
         ];
 
         DB::transaction(function () use ($rows) {
             foreach ($rows as $row) {
-                DB::table('qiraat_readings')->updateOrInsert(
-                    ['imam' => $row['imam'], 'riwaya' => $row['riwaya']],
-                    ['name' => $row['name']]
-                );
+                // Check if the record exists by English name
+                $exists = DB::table('qiraat_readings')
+                    ->where('imam->en', $row['imam']['en'])
+                    ->where('riwaya->en', $row['riwaya']['en'])
+                    ->first();
+
+                // Encode for DB storage
+                $data = [
+                    'imam'   => json_encode($row['imam']),
+                    'riwaya' => json_encode($row['riwaya']),
+                    'name'   => json_encode($row['name']),
+                ];
+
+                if ($exists) {
+                    DB::table('qiraat_readings')->where('id', $exists->id)->update($data);
+                } else {
+                    DB::table('qiraat_readings')->insert($data);
+                }
             }
         });
+    }
+
+    private function formatRow(array $imam, array $riwaya): array
+    {
+        // Return raw arrays, not JSON strings
+        return [
+            'imam'   => $imam,
+            'riwaya' => $riwaya,
+            'name'   => [
+                'en' => "{$riwaya['en']} 'an {$imam['en']}",
+                'ar' => "{$riwaya['ar']} عن {$imam['ar']}",
+                'ku' => "{$riwaya['ku']} لە {$imam['ku']}ـەوە",
+            ],
+        ];
     }
 }
