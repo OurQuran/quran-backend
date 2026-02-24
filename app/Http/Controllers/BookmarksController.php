@@ -26,6 +26,7 @@ class BookmarksController extends Controller
                 ->join('ayahs', 'ayahs.id', '=', 'bookmarks.ayah_id')
                 ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
                 ->select(
+                    'bookmarks.id',
                     'surahs.id as surah_id',
                     'surahs.name_en as surah_name_en',
                     'surahs.name_ar as surah_name_ar',
@@ -38,6 +39,7 @@ class BookmarksController extends Controller
                     'ayahs.sajda',
                     'ayahs.ayah_template',
                     'ayahs.pure_text',
+                    'bookmarks.created_at'
                 )
                 ->orderBy('created_at', 'desc');
 
@@ -58,7 +60,8 @@ class BookmarksController extends Controller
                 $tags = $this->getTagsForAyah($ayah, $user);
 
                 return [
-                    'id' => $item->ayah_id,
+                    'id' => $item->id,
+                    'ayah_id' => $item->ayah_id,
                     'surah_id' => $item->surah_id,
                     'surah_name_ar' => $item->surah_name_ar,
                     'surah_name_en' => $item->surah_name_en,
@@ -71,6 +74,7 @@ class BookmarksController extends Controller
                     'ayah_template' => $item->ayah_template,
                     'pure_text' => $item->pure_text,
                     'bookmarked' => true,
+                    'created_at' => $item->created_at,
                     'tags' => $tags->map(function ($tag) {
                         return [
                             'id' => $tag->id,
