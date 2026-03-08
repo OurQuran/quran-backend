@@ -102,10 +102,11 @@ class AutoMapMushafWords extends Command
         $this->resetCounters();
         $this->openReport($this->option('report'), $qiraatId);
 
-        $this->info("Qiraat={$qiraatId} | " .
-            ($dryRun ? "DRY-RUN" : "WRITE") . " | " .
-            ($onlyUnmapped ? "ONLY-UNMAPPED" : "REMAP") . " | " .
-            "maxCombinedWords={$maxCombined}, maxSplitWords={$maxSplit} | window={$windowRadius}, scan={$forwardScan}, dpMaxBlock={$dpMaxBlock}"
+        $this->info(
+            "Qiraat={$qiraatId} | " .
+                ($dryRun ? "DRY-RUN" : "WRITE") . " | " .
+                ($onlyUnmapped ? "ONLY-UNMAPPED" : "REMAP") . " | " .
+                "maxCombinedWords={$maxCombined}, maxSplitWords={$maxSplit} | window={$windowRadius}, scan={$forwardScan}, dpMaxBlock={$dpMaxBlock}"
         );
         $this->line("Report: {$this->reportPath}");
 
@@ -475,12 +476,12 @@ class AutoMapMushafWords extends Command
     {
         if (empty($blocks)) return [];
 
-        usort($blocks, fn($a,$b) => $a['start_i'] <=> $b['start_i']);
+        usort($blocks, fn($a, $b) => $a['start_i'] <=> $b['start_i']);
         $out = [$blocks[0]];
 
         for ($k = 1; $k < count($blocks); $k++) {
             $cur = $blocks[$k];
-            $last = &$out[count($out)-1];
+            $last = &$out[count($out) - 1];
 
             if ($cur['start_i'] <= $last['end_i'] + 1) {
                 $last['end_i'] = max($last['end_i'], $cur['end_i']);
@@ -542,7 +543,8 @@ class AutoMapMushafWords extends Command
             if ($mTok['norm'] !== '' && $mTok['norm'] === $bTok['norm']) {
                 $rows[] = $this->mapRow($mTok['id'], $bTok['id'], 'exact', null, null, null, $activeDiff['diff_id'] ?? null, 'exact_norm', 1.0);
                 $this->cntExact++;
-                $m++; $b++;
+                $m++;
+                $b++;
                 continue;
             }
 
@@ -550,7 +552,8 @@ class AutoMapMushafWords extends Command
             if (!empty($mTok['skel']) && $mTok['skel'] === ($bTok['skel'] ?? '')) {
                 $rows[] = $this->mapRow($mTok['id'], $bTok['id'], 'exact', null, null, null, $activeDiff['diff_id'] ?? null, 'exact_skeleton', $inDiff ? 0.80 : 0.88);
                 $this->cntExact++;
-                $m++; $b++;
+                $m++;
+                $b++;
                 continue;
             }
 
@@ -618,11 +621,11 @@ class AutoMapMushafWords extends Command
             }
 
             // Inside diff block: be more permissive — try small skips
-            if ($b + 1 < count($bSeq) && ($mTok['norm'] === $bSeq[$b+1]['norm'] || (!empty($mTok['skel']) && $mTok['skel'] === ($bSeq[$b+1]['skel'] ?? '')))) {
+            if ($b + 1 < count($bSeq) && ($mTok['norm'] === $bSeq[$b + 1]['norm'] || (!empty($mTok['skel']) && $mTok['skel'] === ($bSeq[$b + 1]['skel'] ?? '')))) {
                 $b++;
                 continue;
             }
-            if ($m + 1 < count($mSeq) && ($mSeq[$m+1]['norm'] === $bTok['norm'] || (!empty($mSeq[$m+1]['skel']) && $mSeq[$m+1]['skel'] === ($bTok['skel'] ?? '')))) {
+            if ($m + 1 < count($mSeq) && ($mSeq[$m + 1]['norm'] === $bTok['norm'] || (!empty($mSeq[$m + 1]['skel']) && $mSeq[$m + 1]['skel'] === ($bTok['skel'] ?? '')))) {
                 $m++;
                 continue;
             }
@@ -726,7 +729,7 @@ class AutoMapMushafWords extends Command
         $baseTokens = array_slice($bSeq, $bStart, $bEnd - $bStart + 1);
 
         $mStart = max(0, $mIdx - $windowRadius);
-        $mEnd   = min(count($mSeq)-1, $mIdx + $forwardScan);
+        $mEnd   = min(count($mSeq) - 1, $mIdx + $forwardScan);
         $mWindow = array_slice($mSeq, $mStart, $mEnd - $mStart + 1);
 
         if (empty($baseTokens) || empty($mWindow)) return null;
@@ -737,36 +740,58 @@ class AutoMapMushafWords extends Command
         $n = count($A);
         $m = count($B);
 
-        $dp = array_fill(0, $n+1, array_fill(0, $m+1, 0));
-        $bt = array_fill(0, $n+1, array_fill(0, $m+1, ''));
+        $dp = array_fill(0, $n + 1, array_fill(0, $m + 1, 0));
+        $bt = array_fill(0, $n + 1, array_fill(0, $m + 1, ''));
 
-        for ($i=0;$i<=$n;$i++) { $dp[$i][0] = $i; $bt[$i][0] = 'up'; }
-        for ($j=0;$j<=$m;$j++) { $dp[0][$j] = $j; $bt[0][$j] = 'left'; }
+        for ($i = 0; $i <= $n; $i++) {
+            $dp[$i][0] = $i;
+            $bt[$i][0] = 'up';
+        }
+        for ($j = 0; $j <= $m; $j++) {
+            $dp[0][$j] = $j;
+            $bt[0][$j] = 'left';
+        }
         $bt[0][0] = '';
 
-        for ($i=1;$i<=$n;$i++) {
-            for ($j=1;$j<=$m;$j++) {
-                $cost = ($A[$i-1] !== '' && $A[$i-1] === $B[$j-1]) ? 0 : 1;
-                $diag = $dp[$i-1][$j-1] + $cost;
-                $up   = $dp[$i-1][$j] + 1;
-                $left = $dp[$i][$j-1] + 1;
+        for ($i = 1; $i <= $n; $i++) {
+            for ($j = 1; $j <= $m; $j++) {
+                $cost = ($A[$i - 1] !== '' && $A[$i - 1] === $B[$j - 1]) ? 0 : 1;
+                $diag = $dp[$i - 1][$j - 1] + $cost;
+                $up   = $dp[$i - 1][$j] + 1;
+                $left = $dp[$i][$j - 1] + 1;
 
-                $best = $diag; $dir = 'diag';
-                if ($up < $best) { $best = $up; $dir = 'up'; }
-                if ($left < $best) { $best = $left; $dir = 'left'; }
+                $best = $diag;
+                $dir = 'diag';
+                if ($up < $best) {
+                    $best = $up;
+                    $dir = 'up';
+                }
+                if ($left < $best) {
+                    $best = $left;
+                    $dir = 'left';
+                }
 
                 $dp[$i][$j] = $best;
                 $bt[$i][$j] = $dir;
             }
         }
 
-        $i = $n; $j = $m;
+        $i = $n;
+        $j = $m;
         $pairs = [];
         while ($i > 0 || $j > 0) {
             $dir = $bt[$i][$j] ?? '';
-            if ($dir === 'diag') { $pairs[] = [$i-1, $j-1]; $i--; $j--; }
-            elseif ($dir === 'up') { $pairs[] = [$i-1, null]; $i--; }
-            else { $pairs[] = [null, $j-1]; $j--; }
+            if ($dir === 'diag') {
+                $pairs[] = [$i - 1, $j - 1];
+                $i--;
+                $j--;
+            } elseif ($dir === 'up') {
+                $pairs[] = [$i - 1, null];
+                $i--;
+            } else {
+                $pairs[] = [null, $j - 1];
+                $j--;
+            }
         }
         $pairs = array_reverse($pairs);
 
@@ -784,7 +809,9 @@ class AutoMapMushafWords extends Command
                 (int)$mTok['id'],
                 (int)$bTok['id'],
                 'exact',
-                null, null, null,
+                null,
+                null,
+                null,
                 $diffId ?: null,
                 'dp_block',
                 $match ? 0.9 : 0.6
@@ -835,7 +862,7 @@ class AutoMapMushafWords extends Command
                 DB::table('mushaf_word_to_word_map')->upsert(
                     $chunk,
                     ['mushaf_word_id', 'word_id'],
-                    ['map_type','part_no','parts_total','word_order','qiraat_difference_id','match_method','confidence','updated_at']
+                    ['map_type', 'part_no', 'parts_total', 'word_order', 'qiraat_difference_id', 'match_method', 'confidence', 'updated_at']
                 );
             }
         });
@@ -941,8 +968,8 @@ class AutoMapMushafWords extends Command
         $t = preg_replace('/[\p{Mn}\p{Me}]+/u', '', $t);
 
         $t = str_replace(
-            ['أ','إ','آ','ٱ','ٲ','ٳ','ٵ','ى','ئ','ي','ی','ې','ے','ۍ','ۑ','ؤ','ٶ','ۄ','ک','ڪ','ة','ہ','ە','ۀ','ۂ','ھ','ۿ','ۺ','گ'],
-            ['ا','ا','ا','ا','ا','ا','ا','ي','i','ي','ي','ي','ي','ي','ي','ي','و','و','و','ك','ك','ه','ه','ه','ه','ه','ه','ه','ه','ك'],
+            ['أ', 'إ', 'آ', 'ٱ', 'ٲ', 'ٳ', 'ٵ', 'ى', 'ئ', 'ي', 'ی', 'ې', 'ے', 'ۍ', 'ۑ', 'ؤ', 'ٶ', 'ۄ', 'ک', 'ڪ', 'ة', 'ہ', 'ە', 'ۀ', 'ۂ', 'ھ', 'ۿ', 'ۺ', 'گ'],
+            ['ا', 'ا', 'ا', 'ا', 'ا', 'ا', 'ا', 'ي', 'i', 'ي', 'ي', 'ي', 'ي', 'ي', 'ي', 'ي', 'و', 'و', 'و', 'ك', 'ك', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ك'],
             $t
         );
 
@@ -1018,7 +1045,7 @@ class AutoMapMushafWords extends Command
         }
 
         $this->reportFp = $fp;
-        fputcsv($this->reportFp, ['mushaf_ayah_id','surah_id','number_in_surah','reason','details']);
+        fputcsv($this->reportFp, ['mushaf_ayah_id', 'surah_id', 'number_in_surah', 'reason', 'details']);
     }
 
     private function closeReport(): void
