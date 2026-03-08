@@ -5,10 +5,13 @@
     "keywords": ["laravel", "framework"],
     "license": "MIT",
     "require": {
-        "php": "^8.2",
-        "laravel/framework": "^11.9",
+        "php": "8.5",
+        "ext-pdo": "*",
+        "ext-simplexml": "*",
+        "laravel/framework": "^v12.49.0",
         "laravel/sanctum": "^4.0",
-        "laravel/tinker": "^2.9"
+        "laravel/tinker": "^2.9",
+        "phpoffice/phpspreadsheet": "^5.4"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

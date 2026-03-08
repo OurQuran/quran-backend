@@ -51,4 +51,8 @@ class Edition extends Model
 					->withPivot('id', 'data', 'is_audio')
 					->withTimestamps();
 	}
+
+    public function qiraat(){
+        return $this->belongsTo(QiraatReading::class, 'qiraat_reading_id', 'id');
+    }
 }

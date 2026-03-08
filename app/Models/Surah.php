@@ -43,4 +43,9 @@ class Surah extends Model
 	{
 		return $this->hasMany(Ayah::class);
 	}
+
+    public function mushafAyahs()
+    {
+        return $this->hasMany(MushafAyah::class);
+    }
 }
