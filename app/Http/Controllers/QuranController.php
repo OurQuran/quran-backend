@@ -22,7 +22,8 @@ class QuranController extends Controller
 {
 
     // todo: Edition Languages (todo, group by the language identifier for easier frontend fetch)
-    public function languages(){
+    public function languages()
+    {
         try {
             $editions = Edition::query()->select('language')->get();
 
@@ -310,7 +311,6 @@ class QuranController extends Controller
                 ],
                 'ayahs' => $modified,
             ], 'Page retrieved successfully');
-
         } catch (Exception $e) {
             return $this->apiError('Failed to retrieve page: ' . $e->getMessage());
         }
@@ -554,7 +554,6 @@ class QuranController extends Controller
                 ],
                 'ayahs' => $modifiedAyahs,
             ], 'Surah retrieved successfully');
-
         } catch (Exception $e) {
             return $this->apiError("Failed to retrieve Surah: " . $e->getMessage());
         }
@@ -651,7 +650,8 @@ class QuranController extends Controller
         }
     }
 
-    public function qiraats() {
+    public function qiraats()
+    {
         $qiraats = QiraatReading::all();
         return $this->apiSuccess($qiraats, 'Qiraats retrieved successfully');
     }

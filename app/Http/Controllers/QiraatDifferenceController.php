@@ -48,6 +48,10 @@ class QiraatDifferenceController extends Controller
         $totalPages = (int) max(1, ceil($totalCount / $perPage));
         $items = $query->forPage($page, $perPage)->get();
 
+        if ($items->isEmpty()) {
+            return $this->apiError('No qiraat differences found', 404);
+        }
+
         return $this->apiSuccess([
             'meta' => [
                 'total_count' => $totalCount,
