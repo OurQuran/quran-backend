@@ -1,9 +1,11 @@
 <?php
 
 // Automatically include all route files from subroutes folder
-use App\Http\Controllers\SurahController;
+use App\Http\Controllers\QuranController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\QiraatAyahController;
+use App\Http\Controllers\QiraatWordController;
 use Illuminate\Support\Facades\Route;
 
 foreach (glob(__DIR__ . '/subroutes/*.php') as $routeFile) {
@@ -20,4 +22,9 @@ Route::post('/tags-scrape', [TagController::class, 'scrape']);
 Route::post('/tags-scrape-array', [TagController::class, 'scrapeArray']);
 Route::post('/untag-array', [TagController::class, 'untagArray']);
 
-Route::get('/search', [SurahController::class, 'search']);
+Route::get('/search', [QuranController::class, 'search']);
+
+// Qiraat: ayah-level differences (compare readings for one ayah)
+Route::get('/ayahs/{mushaf_ayah_id}/differences', [QiraatAyahController::class, 'differences']);
+// Qiraat: word-level variants (differences between words across readings)
+Route::get('/words/{mushaf_word_id}/variants', [QiraatWordController::class, 'variants']);
