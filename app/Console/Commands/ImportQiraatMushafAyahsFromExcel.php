@@ -38,8 +38,9 @@ class ImportQiraatMushafAyahsFromExcel extends Command
         15 => 'qiraat_excels/6_wardan.xlsx',
         16 => 'qiraat_excels/6_jamar.xlsx',
         17 => 'qiraat_excels/11_rwais.xlsx',
-        20 => 'qiraat_excels/9_idris.xlsx',
+        18 => 'qiraat_excels/11_rawh.xlsx',
         19 => 'qiraat_excels/9_ishaq.xlsx',
+        20 => 'qiraat_excels/9_idris.xlsx',
     ];
 
     /**
@@ -547,8 +548,39 @@ class ImportQiraatMushafAyahsFromExcel extends Command
         static $drop = null;
         if ($drop === null) {
             $drop = array_flip([
-                'ۖ','ۗ','ۘ','ۙ','ۚ','ۛ','ۜ','۩','ٕ','ٰ','ً','ٌ','ٍ','َ','ُ','ِ','ّ','ْ','ٓ','ٔ',
-                '۝','۞','ۡ','ۢ','ۤ','ۥ','ۦ','ۧ','ۨ','ۭ','◌','◌ٰ','◌ّ',
+                'ۖ',
+                'ۗ',
+                'ۘ',
+                'ۙ',
+                'ۚ',
+                'ۛ',
+                'ۜ',
+                '۩',
+                'ٕ',
+                'ٰ',
+                'ً',
+                'ٌ',
+                'ٍ',
+                'َ',
+                'ُ',
+                'ِ',
+                'ّ',
+                'ْ',
+                'ٓ',
+                'ٔ',
+                '۝',
+                '۞',
+                'ۡ',
+                'ۢ',
+                'ۤ',
+                'ۥ',
+                'ۦ',
+                'ۧ',
+                'ۨ',
+                'ۭ',
+                '◌',
+                '◌ٰ',
+                '◌ّ',
             ]);
         }
         if (isset($drop[$ch])) return '';
@@ -559,7 +591,7 @@ class ImportQiraatMushafAyahsFromExcel extends Command
     private function removeArabicDiacritics(string $text): string
     {
         $text = str_replace(['ٱ'], ['ا'], $text);
-        $text = str_replace(['آ','أ','إ'], ['ا','ا','ا'], $text);
+        $text = str_replace(['آ', 'أ', 'إ'], ['ا', 'ا', 'ا'], $text);
         $text = str_replace(['ى'], ['ي'], $text); // in removeArabicDiacritics
 
         $pattern = '/[' .
@@ -584,10 +616,41 @@ class ImportQiraatMushafAyahsFromExcel extends Command
         $pureText = preg_replace($pattern, '', $text);
 
         $additionalSymbols = [
-            'ۖ','ۗ','ۘ','ۙ','ۚ','ۛ','ۜ','۩','ٕ','ٰ','ٰٰ',
-            'ً','ٌ','ٍ','َ','ُ','ِ','ّ','ْ','ٓ','ٔ',
-            '۝','۞','ۡ','ۢ','ۤ','ٓ','ۥ','ۦ','ۧ','ۨ','ۭ',
-            '◌','◌ٰ','◌ّ',
+            'ۖ',
+            'ۗ',
+            'ۘ',
+            'ۙ',
+            'ۚ',
+            'ۛ',
+            'ۜ',
+            '۩',
+            'ٕ',
+            'ٰ',
+            'ٰٰ',
+            'ً',
+            'ٌ',
+            'ٍ',
+            'َ',
+            'ُ',
+            'ِ',
+            'ّ',
+            'ْ',
+            'ٓ',
+            'ٔ',
+            '۝',
+            '۞',
+            'ۡ',
+            'ۢ',
+            'ۤ',
+            'ٓ',
+            'ۥ',
+            'ۦ',
+            'ۧ',
+            'ۨ',
+            'ۭ',
+            '◌',
+            '◌ٰ',
+            '◌ّ',
         ];
 
         $pureText = str_replace($additionalSymbols, '', $pureText);
@@ -683,5 +746,4 @@ class ImportQiraatMushafAyahsFromExcel extends Command
         // trim common punctuation that appears in Excel cells
         return trim($s, " \t\n\r\0\x0B،,.;:!؟");
     }
-
 }

@@ -7,8 +7,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Auto-map mushaf_words -> words using:
- * - mushaf_ayah_to_ayah_map (exact/combined/split at ayah level)
- * - qiraat_differences as "diff blocks" (expected mismatch spans)
+ * - mushaf_ayah_to_ayah_map (exact/combined/split at ayah level), like map mushaf ayahs to base ayahs
+ * - qiraat_differences (qiraat_reading_id, surah, ayah, hafs_text) as "diff blocks": (surah, ayah) locates
+ *   the base ayah, then hafs_text is matched in that ayah's base words to get the span [start_i, end_i]
  *
  * Word mapping strategies (in order):
  *  1) EXACT: norm(mushaf_word) == norm(base_word)
@@ -430,7 +431,9 @@ class AutoMapMushafWords extends Command
     }
 
     /**
-     * Diff blocks (base indices).
+     * Diff blocks (base indices) from qiraat_differences (surah, ayah, hafs_text).
+     * Matches like map mushaf ayahs to base ayahs: (surah, ayah) identifies the base ayah,
+     * then hafs_text is located in that ayah's base word sequence to get [start_i, end_i].
      */
     private function loadDiffBlocksAsIndices(int $qiraatId, array $baseSeq): array
     {
@@ -439,37 +442,121 @@ class AutoMapMushafWords extends Command
         $baseAyahIds = array_values(array_unique(array_filter(array_map(fn($t) => $t['ayah_id'] ?? null, $baseSeq))));
         if (empty($baseAyahIds)) return [];
 
-        $baseIndexByWordId = [];
-        foreach ($baseSeq as $i => $t) {
-            $baseIndexByWordId[(int)$t['id']] = $i;
+        // (surah_id, number_in_surah) -> ayah_id (first id when multiple)
+        $surahAyahToAyahId = [];
+        $ayahRows = DB::table('ayahs')
+            ->whereIn('id', $baseAyahIds)
+            ->select('id', 'surah_id', 'number_in_surah')
+            ->orderBy('id')
+            ->get();
+        foreach ($ayahRows as $a) {
+            $key = (int)$a->surah_id . ':' . (int)$a->number_in_surah;
+            if (!isset($surahAyahToAyahId[$key])) {
+                $surahAyahToAyahId[$key] = (int)$a->id;
+            }
+        }
+
+        // ayah_id -> [start_idx, end_idx] in baseSeq (consecutive indices for that ayah)
+        $ayahIdToRange = [];
+        $i = 0;
+        while ($i < count($baseSeq)) {
+            $aid = (int)($baseSeq[$i]['ayah_id'] ?? 0);
+            if ($aid <= 0) {
+                $i++;
+                continue;
+            }
+            $start = $i;
+            while ($i < count($baseSeq) && (int)($baseSeq[$i]['ayah_id'] ?? 0) === $aid) {
+                $i++;
+            }
+            $end = $i - 1;
+            if (!isset($ayahIdToRange[$aid])) {
+                $ayahIdToRange[$aid] = [$start, $end];
+            } else {
+                // same ayah appears again (e.g. combined group); extend range
+                $ayahIdToRange[$aid][1] = $end;
+            }
+        }
+
+        $surahAyahKeys = array_keys($surahAyahToAyahId);
+        if (empty($surahAyahKeys)) return [];
+
+        $surahAyahPairs = [];
+        foreach ($surahAyahKeys as $k) {
+            [$s, $n] = explode(':', $k, 2);
+            $surahAyahPairs[] = [(int)$s, (int)$n];
         }
 
         $rows = DB::table('qiraat_differences')
-            ->select('id', 'ayah_id', 'start_word_id', 'end_word_id')
+            ->select('id', 'surah', 'ayah', 'hafs_text')
             ->where('qiraat_reading_id', $qiraatId)
-            ->whereIn('ayah_id', $baseAyahIds)
-            ->orderBy('ayah_id')
-            ->orderBy('start_word_id')
+            ->where(function ($q) use ($surahAyahPairs) {
+                foreach ($surahAyahPairs as [$surah, $ayah]) {
+                    $q->orWhere(function ($q2) use ($surah, $ayah) {
+                        $q2->where('surah', $surah)->where('ayah', $ayah);
+                    });
+                }
+            })
+            ->orderBy('surah')
+            ->orderBy('ayah')
             ->get();
 
         $blocks = [];
         foreach ($rows as $r) {
-            $sId = (int)$r->start_word_id;
-            $eId = (int)$r->end_word_id;
-            if (!isset($baseIndexByWordId[$sId]) || !isset($baseIndexByWordId[$eId])) continue;
+            $key = (int)$r->surah . ':' . (int)$r->ayah;
+            $ayahId = $surahAyahToAyahId[$key] ?? null;
+            if ($ayahId === null) continue;
 
-            $start = $baseIndexByWordId[$sId];
-            $end   = $baseIndexByWordId[$eId];
-            if ($end < $start) [$start, $end] = [$end, $start];
+            $range = $ayahIdToRange[$ayahId] ?? null;
+            if ($range === null) continue;
 
+            [$rangeStart, $rangeEnd] = $range;
+            $slice = array_slice($baseSeq, $rangeStart, $rangeEnd - $rangeStart + 1);
+            $hafsNorm = $this->normalizeArabicWord(trim((string)$r->hafs_text));
+            if ($hafsNorm === '') continue;
+
+            $span = $this->findSpanInNormalizedWords($slice, $hafsNorm);
+            if ($span === null) continue;
+
+            [$spanStart, $spanEnd] = $span;
             $blocks[] = [
                 'diff_id' => (int)$r->id,
-                'start_i' => $start,
-                'end_i'   => $end,
+                'start_i' => $rangeStart + $spanStart,
+                'end_i'   => $rangeStart + $spanEnd,
             ];
         }
 
         return $this->mergeOverlappingBlocks($blocks);
+    }
+
+    /**
+     * Find [start, end] (indices into $words) such that concatenation of norms matches $hafsNorm.
+     * Tries no-space concat first, then space-separated.
+     */
+    private function findSpanInNormalizedWords(array $words, string $hafsNorm): ?array
+    {
+        $n = count($words);
+        if ($n === 0 || $hafsNorm === '') return null;
+
+        for ($start = 0; $start < $n; $start++) {
+            $noSpace = '';
+            for ($end = $start; $end < $n; $end++) {
+                $noSpace .= $words[$end]['norm'] ?? '';
+                if ($noSpace === $hafsNorm) {
+                    return [$start, $end];
+                }
+                if (mb_strlen($noSpace) > mb_strlen($hafsNorm)) break;
+            }
+            $withSpace = '';
+            for ($end = $start; $end < $n; $end++) {
+                $withSpace .= ($withSpace === '' ? '' : ' ') . ($words[$end]['norm'] ?? '');
+                if ($withSpace === $hafsNorm) {
+                    return [$start, $end];
+                }
+                if (mb_strlen($withSpace) > mb_strlen($hafsNorm)) break;
+            }
+        }
+        return null;
     }
 
     private function mergeOverlappingBlocks(array $blocks): array
@@ -548,6 +635,15 @@ class AutoMapMushafWords extends Command
                 continue;
             }
 
+            // 1b) both empty (e.g. decorative ۞) — treat as match
+            if (($mTok['norm'] ?? '') === '' && ($bTok['norm'] ?? '') === '') {
+                $rows[] = $this->mapRow($mTok['id'], $bTok['id'], 'exact', null, null, null, $activeDiff['diff_id'] ?? null, 'exact_empty', 0.95);
+                $this->cntExact++;
+                $m++;
+                $b++;
+                continue;
+            }
+
             // 2) exact skeleton (rasm tolerance)
             if (!empty($mTok['skel']) && $mTok['skel'] === ($bTok['skel'] ?? '')) {
                 $rows[] = $this->mapRow($mTok['id'], $bTok['id'], 'exact', null, null, null, $activeDiff['diff_id'] ?? null, 'exact_skeleton', $inDiff ? 0.80 : 0.88);
@@ -606,8 +702,22 @@ class AutoMapMushafWords extends Command
                 continue;
             }
 
-            // If mismatch outside diff block, report + advance mushaf
+            // If mismatch outside diff block: try skipping base words to resync (e.g. mushaf verse is suffix of base)
             if (!$inDiff) {
+                $skipLimit = min($windowRadius, count($bSeq) - $b - 1);
+                for ($k = 1; $k <= $skipLimit; $k++) {
+                    $nextB = $b + $k;
+                    if ($nextB >= count($bSeq)) break;
+                    $nextBTok = $bSeq[$nextB];
+                    if ($mTok['norm'] !== '' && $mTok['norm'] === ($nextBTok['norm'] ?? '')) {
+                        $b = $nextB;
+                        continue 2;
+                    }
+                    if (!empty($mTok['skel']) && $mTok['skel'] === ($nextBTok['skel'] ?? '')) {
+                        $b = $nextB;
+                        continue 2;
+                    }
+                }
                 $this->cntUnresolved++;
                 $this->reportRow(
                     $mushafAyahIdForReport,
@@ -967,9 +1077,10 @@ class AutoMapMushafWords extends Command
         $t = preg_replace('/[\x{0610}-\x{061A}\x{06D6}-\x{06ED}\x{08D3}-\x{08FF}]/u', '', $t);
         $t = preg_replace('/[\p{Mn}\p{Me}]+/u', '', $t);
 
+        // Normalize letter variants (ئ -> ي so يستهزي/يستهزئ match across scripts)
         $t = str_replace(
             ['أ', 'إ', 'آ', 'ٱ', 'ٲ', 'ٳ', 'ٵ', 'ى', 'ئ', 'ي', 'ی', 'ې', 'ے', 'ۍ', 'ۑ', 'ؤ', 'ٶ', 'ۄ', 'ک', 'ڪ', 'ة', 'ہ', 'ە', 'ۀ', 'ۂ', 'ھ', 'ۿ', 'ۺ', 'گ'],
-            ['ا', 'ا', 'ا', 'ا', 'ا', 'ا', 'ا', 'ي', 'i', 'ي', 'ي', 'ي', 'ي', 'ي', 'ي', 'ي', 'و', 'و', 'و', 'ك', 'ك', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ك'],
+            ['ا', 'ا', 'ا', 'ا', 'ا', 'ا', 'ا', 'ي', 'ي', 'ي', 'ي', 'ي', 'ي', 'ي', 'ي', 'ي', 'و', 'و', 'و', 'ك', 'ك', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ه', 'ك'],
             $t
         );
 

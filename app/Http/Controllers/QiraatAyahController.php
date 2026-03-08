@@ -38,7 +38,7 @@ class QiraatAyahController extends Controller
 
         if ($isMushaf) {
             $refMushafAyah = DB::table('mushaf_ayahs')->where('id', $id)->first();
-            if (!$refMushafAyah) return response()->json(['message' => 'mushaf_ayah not found'], 404);
+            if (!$refMushafAyah) return $this->apiError('mushaf_ayah not found', 404);
 
             $baseAyahIds = DB::table('mushaf_ayah_to_ayah_map')
                 ->where('mushaf_ayah_id', $id)
@@ -48,7 +48,7 @@ class QiraatAyahController extends Controller
                 ->all();
         } else {
             $baseExists = DB::table('ayahs')->where('id', $id)->exists();
-            if (!$baseExists) return response()->json(['message' => 'base ayah not found'], 404);
+            if (!$baseExists) return $this->apiError('base ayah not found', 404);
 
             $baseAyahIds = [(int)$id];
 
@@ -61,11 +61,10 @@ class QiraatAyahController extends Controller
         }
 
         if (empty($baseAyahIds)) {
-            return response()->json([
-                'input' => ['is_mushaf' => $isMushaf ? 1 : 0, 'id' => (int)$id],
+            return $this->apiSuccess([
                 'base' => ['ayah_ids' => [], 'ayahs' => []],
                 'readings' => [],
-            ]);
+            ], 'Ayah differences retrieved successfully');
         }
 
         $baseAyahs = DB::table('ayahs')
@@ -98,11 +97,10 @@ class QiraatAyahController extends Controller
         $mushafAyahIds = $ayahs->pluck('id')->values()->all();
 
         if (empty($mushafAyahIds)) {
-            return response()->json([
-                'input' => ['is_mushaf' => $isMushaf ? 1 : 0, 'id' => (int)$id],
+            return $this->apiSuccess([
                 'base' => ['ayah_ids' => $baseAyahIds, 'ayahs' => $baseAyahs],
                 'readings' => [],
-            ]);
+            ], 'Ayah differences retrieved successfully');
         }
 
         // words + mapping
@@ -149,7 +147,7 @@ class QiraatAyahController extends Controller
 
             $knownDiffCount = 0;
             foreach ($words as $w) {
-                if (!empty($w['known_difference_ids'])) $knownDiffCount++;
+                if (!empty($w['flags']['known_diff'])) $knownDiffCount++;
             }
 
             $readings[] = [
@@ -167,17 +165,13 @@ class QiraatAyahController extends Controller
             ];
         }
 
-        return response()->json([
-            'input' => ['is_mushaf' => $isMushaf ? 1 : 0, 'id' => (int)$id],
-            'meta' => [
-                'baseline_qiraat_reading_id' => $baselineQiraatId,
-            ],
+        return $this->apiSuccess([
             'base' => [
                 'ayah_ids' => $baseAyahIds,
                 'ayahs' => $baseAyahs,
             ],
             'readings' => $readings,
-        ]);
+        ], 'Ayah differences retrieved successfully');
     }
 
     private function collapseWords($items): array
@@ -186,17 +180,8 @@ class QiraatAyahController extends Controller
 
         $byWord = $items->groupBy('mushaf_word_id')->map(function ($g) {
             $first = $g->first();
-
-            $maps = $g->filter(fn ($r) => !is_null($r->word_id))->map(fn ($r) => [
-                'word_id' => (int)$r->word_id,
-                'map_type' => $r->map_type,
-                'part_no' => $r->part_no,
-                'parts_total' => $r->parts_total,
-                'word_order' => $r->word_order,
-                'qiraat_difference_id' => $r->qiraat_difference_id,
-            ])->values()->all();
-
-            $knownIds = collect($maps)->pluck('qiraat_difference_id')->filter()->unique()->values()->all();
+            $hasMapping = $g->contains(fn ($r) => !is_null($r->word_id));
+            $knownDiff = $g->contains(fn ($r) => !is_null($r->qiraat_difference_id));
 
             return [
                 'mushaf_word_id' => (int)$first->mushaf_word_id,
@@ -204,11 +189,9 @@ class QiraatAyahController extends Controller
                 'word' => $first->word,
                 'pure_word' => $first->pure_word,
                 'word_template' => $first->word_template,
-                'maps' => $maps,
-                'known_difference_ids' => $knownIds,
                 'flags' => [
-                    'known_diff' => !empty($knownIds),
-                    'has_mapping' => !empty($maps),
+                    'known_diff' => $knownDiff,
+                    'has_mapping' => $hasMapping,
                 ],
             ];
         });

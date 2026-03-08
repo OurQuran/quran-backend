@@ -63,7 +63,7 @@ class QiraatWordController extends Controller
                 ->first();
 
             if (!$clicked) {
-                return response()->json(['message' => 'mushaf_word not found'], 404);
+                return $this->apiError('mushaf_word not found', 404);
             }
 
             $clickedMaps = DB::table('mushaf_word_to_word_map')
@@ -71,8 +71,7 @@ class QiraatWordController extends Controller
                 ->get();
 
             if ($clickedMaps->isEmpty()) {
-                return response()->json([
-                    'input' => ['is_mushaf' => 1, 'id' => (int)$id],
+                return $this->apiSuccess([
                     'clicked' => $this->formatClicked($clicked, [(int)$clicked->mushaf_word_id], collect()),
                     'base' => [
                         'ayah_ids' => [],
@@ -82,7 +81,7 @@ class QiraatWordController extends Controller
                         'note' => 'no_word_mapping',
                     ],
                     'variants' => [],
-                ]);
+                ], 'Word variants retrieved successfully');
             }
 
             // Expand SPLIT group (same mushaf_ayah)
@@ -132,7 +131,7 @@ class QiraatWordController extends Controller
             // base word
             $base = DB::table('words')->where('id', $id)->first(['id', 'word', 'pure_word']);
             if (!$base) {
-                return response()->json(['message' => 'base word not found'], 404);
+                return $this->apiError('base word not found', 404);
             }
 
             $baseWordIds = [(int)$base->id];
@@ -179,8 +178,7 @@ class QiraatWordController extends Controller
         $baseWords = $this->loadBaseWords($baseWordIds);
 
         if (empty($baseAyahIds)) {
-            return response()->json([
-                'input' => ['is_mushaf' => $isMushaf ? 1 : 0, 'id' => (int)$id],
+            return $this->apiSuccess([
                 'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
                 'base' => [
                     'ayah_ids' => [],
@@ -190,7 +188,7 @@ class QiraatWordController extends Controller
                     'note' => 'no_ayah_anchor_found_for_this_word',
                 ],
                 'variants' => [],
-            ]);
+            ], 'Word variants retrieved successfully');
         }
 
         $baseAyahs = $this->loadBaseAyahs($baseAyahIds);
@@ -211,8 +209,7 @@ class QiraatWordController extends Controller
         $mushafAyahIds = $allAyahsQuery->pluck('ma.id')->values()->all();
 
         if (empty($mushafAyahIds)) {
-            return response()->json([
-                'input' => ['is_mushaf' => $isMushaf ? 1 : 0, 'id' => (int)$id],
+            return $this->apiSuccess([
                 'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
                 'base' => [
                     'ayah_ids' => $baseAyahIds,
@@ -222,7 +219,7 @@ class QiraatWordController extends Controller
                     'note' => 'no_related_mushaf_ayahs',
                 ],
                 'variants' => [],
-            ]);
+            ], 'Word variants retrieved successfully');
         }
 
         // clicked pure sequence (only meaningful when we have a clicked mushaf context)
@@ -273,16 +270,6 @@ class QiraatWordController extends Controller
                     'word' => $first->word,
                     'pure_word' => $first->pure_word,
                     'word_template' => $first->word_template,
-                    'maps' => $g->map(fn ($r) => [
-                        'word_id' => (int)$r->word_id,
-                        'map_type' => $r->map_type,
-                        'part_no' => $r->part_no,
-                        'parts_total' => $r->parts_total,
-                        'word_order' => $r->word_order,
-                        'qiraat_difference_id' => $r->qiraat_difference_id,
-                        'match_method' => $r->match_method,
-                        'confidence' => $r->confidence,
-                    ])->values()->all(),
                 ];
             })->values()->sortBy('position')->values();
 
@@ -312,7 +299,6 @@ class QiraatWordController extends Controller
                     'same_pure' => $samePure,
                     'different' => $different,
                 ],
-                'known_difference_ids' => $items->pluck('qiraat_difference_id')->filter()->unique()->values()->all(),
             ];
         }
 
@@ -325,8 +311,7 @@ class QiraatWordController extends Controller
             });
         }
 
-        return response()->json([
-            'input' => ['is_mushaf' => $isMushaf ? 1 : 0, 'id' => (int)$id],
+        return $this->apiSuccess([
             'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
             'base' => [
                 'ayah_ids' => $baseAyahIds,
@@ -335,7 +320,7 @@ class QiraatWordController extends Controller
                 'words' => $baseWords,
             ],
             'variants' => $variants,
-        ]);
+        ], 'Word variants retrieved successfully');
     }
 
     private function formatClicked(object $clicked, array $groupIds, $groupWords): array
