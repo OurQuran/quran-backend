@@ -223,6 +223,8 @@ class QuranController extends Controller
                         'ma.text',
                         'ma.pure_text',
                         'ma.ayah_template',
+                        DB::raw('(SELECT s.name_ar FROM surahs s WHERE s.id = ma.surah_id LIMIT 1) AS surah_name_ar'),
+                        DB::raw('(SELECT s.name_en FROM surahs s WHERE s.id = ma.surah_id LIMIT 1) AS surah_name_en'),
 
                         DB::raw('COALESCE(text_ae.data, NULL) AS translation'),
                         DB::raw('COALESCE(audio_ae.data, NULL) AS audio'),
@@ -484,6 +486,7 @@ class QuranController extends Controller
                         $b = clone $bismillahRow;
                         $b->surah_id = $surah;
                         $b->number_in_surah = 0;
+                        $this->applySurahNames($b);
                         $b->tags = $this->getTagsForAyah($b, $user);
                         $modified->push($b);
                     }
@@ -533,6 +536,7 @@ class QuranController extends Controller
                     $b = clone $bismillahRow;
                     $b->surah_id = $surah;
                     $b->number_in_surah = 0;
+                    $this->applySurahNames($b);
                     $b->tags = $this->getTagsForAyah($b, $user);
                     $modifiedAyahs->push($b);
                 }
@@ -642,6 +646,11 @@ class QuranController extends Controller
             $surah = Ayah::query()
                 ->where('surah_id', '=', $ayahModel->surah_id)
                 ->orderBy('number_in_surah')
+                ->select([
+                    'ayahs.*',
+                    DB::raw('(SELECT s.name_ar FROM surahs s WHERE s.id = ayahs.surah_id LIMIT 1) AS surah_name_ar'),
+                    DB::raw('(SELECT s.name_en FROM surahs s WHERE s.id = ayahs.surah_id LIMIT 1) AS surah_name_en'),
+                ])
                 ->get();
 
             return $this->apiSuccess($surah, 'Surah retrieved successfully');
@@ -692,6 +701,8 @@ class QuranController extends Controller
             $ayahsQuery->addSelect([
                 DB::raw('ayahs.*'),
                 DB::raw('ayahs.ayah_template as base_ayah_template'),
+                DB::raw('(SELECT s.name_ar FROM surahs s WHERE s.id = ayahs.surah_id LIMIT 1) AS surah_name_ar'),
+                DB::raw('(SELECT s.name_en FROM surahs s WHERE s.id = ayahs.surah_id LIMIT 1) AS surah_name_en'),
                 DB::raw("COALESCE(text_ae.data, (SELECT ae1.data FROM ayah_edition ae1 WHERE ae1.ayah_id = 1 AND ae1.edition_id = $textEdition LIMIT 1)) AS translation"),
                 DB::raw("COALESCE(audio_ae.data, (SELECT ae2.data FROM ayah_edition ae2 WHERE ae2.ayah_id = 1 AND ae2.edition_id = $audioEdition LIMIT 1)) AS audio"),
             ]);
@@ -730,6 +741,8 @@ class QuranController extends Controller
             DB::raw('map.ayah_order as mushaf_ayah_order'),
             DB::raw('ayahs.ayah_template as base_ayah_template'),
             DB::raw('ma.ayah_template as mushaf_ayah_template'),
+            DB::raw('(SELECT s.name_ar FROM surahs s WHERE s.id = ayahs.surah_id LIMIT 1) AS surah_name_ar'),
+            DB::raw('(SELECT s.name_en FROM surahs s WHERE s.id = ayahs.surah_id LIMIT 1) AS surah_name_en'),
             DB::raw("COALESCE(text_ae.data, (SELECT ae1.data FROM ayah_edition ae1 WHERE ae1.ayah_id = 1 AND ae1.edition_id = $textEdition LIMIT 1)) AS translation"),
             DB::raw("COALESCE(audio_ae.data, (SELECT ae2.data FROM ayah_edition ae2 WHERE ae2.ayah_id = 1 AND ae2.edition_id = $audioEdition LIMIT 1)) AS audio"),
         ]);
@@ -849,6 +862,16 @@ class QuranController extends Controller
         )->first();
     }
 
+    private function applySurahNames(Ayah $ayah): void
+    {
+        $surah = Surah::query()
+            ->select(['name_ar', 'name_en'])
+            ->find($ayah->surah_id);
+
+        $ayah->surah_name_ar = $surah?->name_ar;
+        $ayah->surah_name_en = $surah?->name_en;
+    }
+
     /**
      * mode:
      * - page: inject bismillah before every ayah that is number_in_surah=1 (except surah 1 & 9)
@@ -869,6 +892,7 @@ class QuranController extends Controller
                         $b = clone $bismillahRow;
                         $b->surah_id = (int)$ayah->surah_id;
                         $b->number_in_surah = 0;
+                        $this->applySurahNames($b);
                         $b->tags = $this->getTagsForAyah($b, $user);
                         $out->push($b);
                     }
@@ -892,6 +916,7 @@ class QuranController extends Controller
                     $b = clone $bismillahRow;
                     $b->surah_id = $currentSurah;
                     $b->number_in_surah = 0;
+                    $this->applySurahNames($b);
                     $b->tags = $this->getTagsForAyah($b, $user);
                     $out->push($b);
                 }
