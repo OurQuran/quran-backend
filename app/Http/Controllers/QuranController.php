@@ -240,23 +240,11 @@ class QuranController extends Controller
                 // shape response
                 $ayahs = collect($rows)->map(function ($r) use ($user) {
                     $r->template = $r->ayah_template;
-
-                    // 1-to-1 mushaf record; still include mushaf_parts for compatibility
-                    $r->mushaf_parts = [[
-                        'mushaf_ayah_id' => (int) $r->mushaf_ayah_id,
-                        'map_type' => 'exact',   // this is just a compatibility hint
-                        'part_no' => null,
-                        'parts_total' => null,
-                        'ayah_order' => null,
-                        'mushaf_page' => (int) $r->page,
-                        'mushaf_juz_id' => (int) $r->juz_id,
-                        'mushaf_hizb_id' => (int) $r->hizb_id,
-                        'mushaf_sajda' => (bool) $r->sajda,
-                    ]];
-
-                    // tags: you currently resolve tags via Ayah model relation (needs base ayah)
-                    // You can load tags later using base_ayah_id if needed.
-                    $r->tags = [];
+                    unset($r->ayah_template, $r->mushaf_ayah_id);
+                    $r->tags = $this->getTagsForAyahId(
+                        $r->base_ayah_id !== null ? (int) $r->base_ayah_id : null,
+                        $user
+                    );
 
                     return $r;
                 });
@@ -653,6 +641,11 @@ class QuranController extends Controller
                 ])
                 ->get();
 
+            $user = $this->checkLoginToken();
+            foreach ($surah as $surahAyah) {
+                $surahAyah->tags = $this->getTagsForAyah($surahAyah, $user);
+            }
+
             return $this->apiSuccess($surah, 'Surah retrieved successfully');
         } catch (Exception $e) {
             return $this->apiError('Failed to retrieve Surah by Ayah: ' . $e->getMessage());
@@ -711,7 +704,6 @@ class QuranController extends Controller
 
             // shape like mushaf mode expects
             foreach ($rows as $row) {
-                $row->mushaf_parts = [];
                 $row->template = $row->base_ayah_template;
                 unset($row->base_ayah_template);
             }
@@ -827,7 +819,6 @@ class QuranController extends Controller
         $result = [];
         foreach ($byId as $data) {
             $ayah = $data['model'];
-            $ayah->mushaf_parts = $data['parts'];
 
             // prefer qiraat mushaf template if present; else fallback to base ayah template
             $ayah->template = $ayah->mushaf_ayah_template ?: $ayah->base_ayah_template;
@@ -870,6 +861,21 @@ class QuranController extends Controller
 
         $ayah->surah_name_ar = $surah?->name_ar;
         $ayah->surah_name_en = $surah?->name_en;
+    }
+
+    private function getTagsForAyahId(?int $ayahId, ?User $user = null): EloquentCollection
+    {
+        if (!$ayahId) {
+            return new EloquentCollection();
+        }
+
+        $ayah = Ayah::query()->find($ayahId);
+
+        if (!$ayah) {
+            return new EloquentCollection();
+        }
+
+        return $this->getTagsForAyah($ayah, $user);
     }
 
     /**
