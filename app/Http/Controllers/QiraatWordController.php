@@ -72,7 +72,7 @@ class QiraatWordController extends Controller
 
             if ($clickedMaps->isEmpty()) {
                 return $this->apiSuccess([
-                    'clicked' => $this->formatClicked($clicked, [(int)$clicked->mushaf_word_id], collect()),
+                  //  'clicked' => $this->formatClicked($clicked, [(int)$clicked->mushaf_word_id], collect()),
                     'base' => [
                         'ayah_ids' => [],
                         'word_ids' => [],
@@ -179,7 +179,7 @@ class QiraatWordController extends Controller
 
         if (empty($baseAyahIds)) {
             return $this->apiSuccess([
-                'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
+                // 'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
                 'base' => [
                     'ayah_ids' => [],
                     'word_ids' => $baseWordIds,
@@ -210,7 +210,7 @@ class QiraatWordController extends Controller
 
         if (empty($mushafAyahIds)) {
             return $this->apiSuccess([
-                'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
+                // 'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
                 'base' => [
                     'ayah_ids' => $baseAyahIds,
                     'word_ids' => $baseWordIds,
@@ -312,7 +312,7 @@ class QiraatWordController extends Controller
         }
 
         return $this->apiSuccess([
-            'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
+            // 'clicked' => $clicked ? $this->formatClicked($clicked, $clickedGroupMushafWordIds, $clickedGroupWords) : null,
             'base' => [
                 'ayah_ids' => $baseAyahIds,
                 'word_ids' => $baseWordIds,

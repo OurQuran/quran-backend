@@ -20,6 +20,7 @@ return new class extends Migration {
             $table->unsignedInteger('order_no');
 
             $table->text('header_text')->nullable();
+            $table->json('images')->nullable();
             $table->longText('body_text');
 
             $table->timestamps();
