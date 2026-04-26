@@ -9,6 +9,7 @@ use App\Models\MushafAyah;
 use App\Models\QiraatReading;
 use App\Models\Surah;
 use App\Models\User;
+use App\Support\QiraatImportMaps;
 use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -36,7 +37,7 @@ class QuranController extends Controller
     {
         try {
             $readings = QiraatReading::query()
-                ->select(['id', 'imam', 'riwaya', 'name'])
+                ->select(['id', 'code', 'imam', 'riwaya', 'name'])
                 ->orderBy('id')
                 ->get();
 
@@ -149,7 +150,7 @@ class QuranController extends Controller
             // =========================
             // MUSHAF MODE (qiraat > 1)
             // =========================
-            if ($qiraatReadingId > 1) {
+            if (!$this->usesBaseAyahs($qiraatReadingId)) {
                 // total mushaf ayahs on that mushaf page for that qiraat
                 $totalCount = DB::table('mushaf_ayahs as ma')
                     ->where('ma.qiraat_reading_id', $qiraatReadingId)
@@ -388,7 +389,7 @@ class QuranController extends Controller
             $perPage = (int) $validated['per_page'];
             $qiraatReadingId = (int) $validated['qiraat_reading_id'];
 
-            $useMushaf = $qiraatReadingId > 1;
+            $useMushaf = !$this->usesBaseAyahs($qiraatReadingId);
 
             if ($useMushaf) {
                 // 1) Count DISTINCT base ayahs for this mushaf surah
@@ -664,7 +665,7 @@ class QuranController extends Controller
         $validated['per_page'] = (int)($validated['per_page'] ?? 20);
         $validated['text_edition'] = (int)($validated['text_edition'] ?? 1);
         $validated['audio_edition'] = (int)($validated['audio_edition'] ?? 110);
-        $validated['qiraat_reading_id'] = (int)($validated['qiraat_reading_id'] ?? 1);
+        $validated['qiraat_reading_id'] = (int)($validated['qiraat_reading_id'] ?? QiraatImportMaps::baseReadingId());
         $validated['verse'] = (int)($validated['verse'] ?? 0);
 
         return $validated;
@@ -687,7 +688,7 @@ class QuranController extends Controller
         }
 
         // ✅ BASE MODE: qiraat=1 => NO mushaf joins, NO mushaf merge
-        if ($qiraatReadingId <= 1) {
+        if ($this->usesBaseAyahs($qiraatReadingId)) {
             $this->applyEditionJoins($ayahsQuery, $textEdition, $audioEdition);
             $this->applyBookmarkedSelect($ayahsQuery);
 
@@ -722,6 +723,8 @@ class QuranController extends Controller
         $ayahsQuery->addSelect([
             DB::raw('ayahs.*'),
             DB::raw('ma.id as mushaf_ayah_id'),
+            DB::raw('ma.text as mushaf_text'),
+            DB::raw('ma.pure_text as mushaf_pure_text'),
             DB::raw('ma.number_in_surah as mushaf_number_in_surah'),
             DB::raw('ma.page as mushaf_page'),
             DB::raw('ma.juz_id as mushaf_juz_id'),
@@ -746,6 +749,11 @@ class QuranController extends Controller
         $rows = $ayahsQuery->get();
 
         return $this->mergeMushafPartsIntoAyahs($rows);
+    }
+
+    private function usesBaseAyahs(int $qiraatReadingId): bool
+    {
+        return QiraatImportMaps::usesBaseAyahs($qiraatReadingId);
     }
 
     private function applyMushafJoin(Builder $ayahsQuery, int $qiraatReadingId): void
@@ -804,6 +812,8 @@ class QuranController extends Controller
             if (!empty($row->mushaf_ayah_id)) {
                 $byId[$ayahId]['parts'][] = [
                     'mushaf_ayah_id' => (int)$row->mushaf_ayah_id,
+                    'text' => $row->mushaf_text,
+                    'pure_text' => $row->mushaf_pure_text,
                     'map_type' => $row->mushaf_map_type,
                     'part_no' => $row->mushaf_part_no !== null ? (int)$row->mushaf_part_no : null,
                     'parts_total' => $row->mushaf_parts_total !== null ? (int)$row->mushaf_parts_total : null,
@@ -819,8 +829,31 @@ class QuranController extends Controller
         $result = [];
         foreach ($byId as $data) {
             $ayah = $data['model'];
+            $parts = $data['parts'];
 
-            // prefer qiraat mushaf template if present; else fallback to base ayah template
+            // Prefer qiraat mushaf fields for non-base readings; keep base id for tags/bookmarks/translations.
+            $mushafTextParts = array_values(array_unique(array_filter(array_map(
+                fn (array $part) => $part['text'] ?? null,
+                $parts
+            ))));
+            if (count($mushafTextParts) > 0) {
+                $ayah->text = implode(' ', $mushafTextParts);
+            }
+
+            $mushafPureTextParts = array_values(array_unique(array_filter(array_map(
+                fn (array $part) => $part['pure_text'] ?? null,
+                $parts
+            ))));
+            if (count($mushafPureTextParts) > 0) {
+                $ayah->pure_text = implode(' ', $mushafPureTextParts);
+            }
+
+            $ayah->number_in_surah = $ayah->mushaf_number_in_surah ?? $ayah->number_in_surah;
+            $ayah->page = $ayah->mushaf_page ?? $ayah->page;
+            $ayah->juz_id = $ayah->mushaf_juz_id ?? $ayah->juz_id;
+            $ayah->hizb_id = $ayah->mushaf_hizb_id ?? $ayah->hizb_id;
+            $ayah->sajda = $ayah->mushaf_sajda ?? $ayah->sajda;
+
             $ayah->template = $ayah->mushaf_ayah_template ?: $ayah->base_ayah_template;
 
             // Clean up temporary fields
@@ -828,6 +861,8 @@ class QuranController extends Controller
                 $ayah->base_ayah_template,
                 $ayah->mushaf_ayah_template,
                 $ayah->mushaf_ayah_id,
+                $ayah->mushaf_text,
+                $ayah->mushaf_pure_text,
                 $ayah->mushaf_number_in_surah,
                 $ayah->mushaf_page,
                 $ayah->mushaf_juz_id,

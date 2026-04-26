@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\QiraatImportMaps;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -15,7 +16,7 @@ class QiraatDifferenceController extends Controller
      * List qiraat_differences for a qiraat reading (paginated).
      * Optional filters: surah, ayah.
      */
-    public function index(Request $request, int $qiraat_reading_id)
+    public function index(Request $request, string $qiraat_reading_id)
     {
         $validated = $request->validate([
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -24,15 +25,15 @@ class QiraatDifferenceController extends Controller
             'ayah' => ['nullable', 'integer', 'min:1'],
         ]);
 
-        $exists = DB::table('qiraat_readings')->where('id', $qiraat_reading_id)->exists();
-        if (!$exists) {
+        $resolvedId = QiraatImportMaps::resolveReadingId($qiraat_reading_id);
+        if (!$resolvedId) {
             return response()->json(['message' => 'Qiraat reading not found'], 404);
         }
 
         $page = (int) ($validated['page'] ?? 1);
         $perPage = (int) ($validated['per_page'] ?? 15);
         $query = DB::table('qiraat_differences')
-            ->where('qiraat_reading_id', $qiraat_reading_id)
+            ->where('qiraat_reading_id', $resolvedId)
             ->orderBy('surah')
             ->orderBy('ayah')
             ->orderBy('id');

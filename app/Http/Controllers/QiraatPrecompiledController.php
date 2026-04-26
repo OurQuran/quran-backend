@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\QiraatImportMaps;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -19,7 +20,7 @@ class QiraatPrecompiledController extends Controller
      * Paginated list of precompiled ayahs for a qiraat.
      * Query: page, per_page, page_number (mushaf page 1-604), surah_id
      */
-    public function ayahs(Request $request, int $qiraat_reading_id)
+    public function ayahs(Request $request, string $qiraat_reading_id)
     {
         $validated = $request->validate([
             'page' => ['nullable', 'integer', 'min:1'],
@@ -28,12 +29,13 @@ class QiraatPrecompiledController extends Controller
             'surah_id' => ['nullable', 'integer', 'min:1', 'max:114'],
         ]);
 
-        if (!DB::table('qiraat_readings')->where('id', $qiraat_reading_id)->exists()) {
+        $resolvedId = QiraatImportMaps::resolveReadingId($qiraat_reading_id);
+        if (!$resolvedId) {
             return $this->apiError('Qiraat reading not found', 404);
         }
 
         $query = DB::table('qiraat_diff_ayahs')
-            ->where('qiraat_reading_id', $qiraat_reading_id)
+            ->where('qiraat_reading_id', $resolvedId)
             ->orderBy('surah_id')
             ->orderBy('number_in_surah')
             ->orderBy('id');
@@ -66,19 +68,20 @@ class QiraatPrecompiledController extends Controller
      * Precompiled ayahs for one surah (paginated).
      * Query: page, per_page
      */
-    public function bySurah(Request $request, int $qiraat_reading_id, int $surah_number)
+    public function bySurah(Request $request, string $qiraat_reading_id, int $surah_number)
     {
         $validated = $request->validate([
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        if (!DB::table('qiraat_readings')->where('id', $qiraat_reading_id)->exists()) {
+        $resolvedId = QiraatImportMaps::resolveReadingId($qiraat_reading_id);
+        if (!$resolvedId) {
             return $this->apiError('Qiraat reading not found', 404);
         }
 
         $query = DB::table('qiraat_diff_ayahs')
-            ->where('qiraat_reading_id', $qiraat_reading_id)
+            ->where('qiraat_reading_id', $resolvedId)
             ->where('surah_id', $surah_number)
             ->orderBy('number_in_surah')
             ->orderBy('id');
@@ -104,14 +107,15 @@ class QiraatPrecompiledController extends Controller
     /**
      * All precompiled ayahs on one mushaf page (no pagination).
      */
-    public function pageAyahs(Request $request, int $qiraat_reading_id, int $page_number)
+    public function pageAyahs(Request $request, string $qiraat_reading_id, int $page_number)
     {
-        if (!DB::table('qiraat_readings')->where('id', $qiraat_reading_id)->exists()) {
+        $resolvedId = QiraatImportMaps::resolveReadingId($qiraat_reading_id);
+        if (!$resolvedId) {
             return $this->apiError('Qiraat reading not found', 404);
         }
 
         $ayahs = DB::table('qiraat_diff_ayahs')
-            ->where('qiraat_reading_id', $qiraat_reading_id)
+            ->where('qiraat_reading_id', $resolvedId)
             ->where('page', $page_number)
             ->orderBy('number_in_surah')
             ->orderBy('id')
@@ -127,19 +131,20 @@ class QiraatPrecompiledController extends Controller
      * Precompiled ayahs for one juz (paginated).
      * Query: page, per_page
      */
-    public function byJuz(Request $request, int $qiraat_reading_id, int $juz_number)
+    public function byJuz(Request $request, string $qiraat_reading_id, int $juz_number)
     {
         $validated = $request->validate([
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        if (!DB::table('qiraat_readings')->where('id', $qiraat_reading_id)->exists()) {
+        $resolvedId = QiraatImportMaps::resolveReadingId($qiraat_reading_id);
+        if (!$resolvedId) {
             return $this->apiError('Qiraat reading not found', 404);
         }
 
         $query = DB::table('qiraat_diff_ayahs')
-            ->where('qiraat_reading_id', $qiraat_reading_id)
+            ->where('qiraat_reading_id', $resolvedId)
             ->where('juz_id', $juz_number)
             ->orderBy('surah_id')
             ->orderBy('number_in_surah')
@@ -167,11 +172,16 @@ class QiraatPrecompiledController extends Controller
      * Precompiled words (with highlight class) for one precompiled ayah.
      * id = qiraat_diff_ayahs.id
      */
-    public function ayahWords(Request $request, int $qiraat_reading_id, int $id)
+    public function ayahWords(Request $request, string $qiraat_reading_id, int $id)
     {
+        $resolvedId = QiraatImportMaps::resolveReadingId($qiraat_reading_id);
+        if (!$resolvedId) {
+            return $this->apiError('Qiraat reading not found', 404);
+        }
+
         $ayah = DB::table('qiraat_diff_ayahs')
             ->where('id', $id)
-            ->where('qiraat_reading_id', $qiraat_reading_id)
+            ->where('qiraat_reading_id', $resolvedId)
             ->first();
 
         if (!$ayah) {
