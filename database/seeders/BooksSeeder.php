@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\QiraatImportMaps;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -11,20 +12,7 @@ class BooksSeeder extends Seeder
     {
         $now = now();
 
-        // Add/adjust names however you want
-        $books = [
-            ['name' => 'تفسير ابن كثير'],
-            ['name' => 'القراءات - ابن عامر'],
-            ['name' => 'القراءات - أبو جعفر'],
-            ['name' => 'القراءات - أبو عمرو'],
-            ['name' => 'القراءات - حمزة'],
-            ['name' => 'القراءات - خلف العاشر'],
-            ['name' => 'القراءات - شعبة'],
-            ['name' => 'القراءات - قالون'],
-            ['name' => 'القراءات - الكسائي'],
-            ['name' => 'القراءات - ورش'],
-            ['name' => 'القراءات - يعقوب'],
-        ];
+        $books = QiraatImportMaps::seededBooks();
 
         foreach ($books as $b) {
             DB::table('books')->updateOrInsert(

@@ -27,7 +27,7 @@ class QiraatReading extends Model
 {
 	protected $table = 'qiraat_readings';
 
-    public $timestamps = true;
+    public $timestamps = false;
 
 	protected $casts = [
         'id' => 'int',
@@ -37,6 +37,7 @@ class QiraatReading extends Model
 	];
 
 	protected $fillable = [
+        'code',
         'imam',
         'riwaya',
         'name',
