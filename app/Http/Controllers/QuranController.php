@@ -392,99 +392,108 @@ class QuranController extends Controller
             $useMushaf = !$this->usesBaseAyahs($qiraatReadingId);
 
             if ($useMushaf) {
-                // 1) Count DISTINCT base ayahs for this mushaf surah
-                $baseCount = DB::table('mushaf_ayahs as ma')
-                    ->join('mushaf_ayah_to_ayah_map as map', 'map.mushaf_ayah_id', '=', 'ma.id')
-                    ->where('ma.qiraat_reading_id', '=', $qiraatReadingId)
-                    ->where('ma.surah_id', '=', $surah)
-                    ->distinct()
-                    ->count('map.ayah_id');
+                $queryBase = DB::table('mushaf_ayahs as ma')
+                    ->where('ma.qiraat_reading_id', $qiraatReadingId)
+                    ->where('ma.surah_id', $surah);
 
-                if ($baseCount === 0) {
+                if (!empty($validated['verse']) && (int) $validated['verse'] !== 0) {
+                    $queryBase->where('ma.number_in_surah', (int) $validated['verse']);
+                }
+
+                $totalCount = (clone $queryBase)->count();
+
+                if ($totalCount === 0) {
                     return $this->apiError('Invalid Surah number or no matching Ayahs', 404);
                 }
 
-                // 2) If you inject Bismillah (surah != 1 && != 9), include it in meta
-                $hasBismillah = ($surah !== 1 && $surah !== 9);
-                $extra = $hasBismillah ? 1 : 0;
-
-                $totalCount = $baseCount + $extra;
                 $totalPages = (int) ceil($totalCount / $perPage);
 
-                // Hard guard: if user requests page beyond total_pages => 404
                 if ($page > $totalPages) {
                     return $this->apiError('Page out of range', 404);
                 }
 
-                // 3) Compute offset/limit over BASE ayahs (not rows)
-                $offset = ($page - 1) * $perPage;
+                $lateral = DB::raw("
+        LATERAL (
+            SELECT map.*
+            FROM mushaf_ayah_to_ayah_map map
+            WHERE map.mushaf_ayah_id = ma.id
+            ORDER BY
+                CASE WHEN map.map_type = 'exact' THEN 0 ELSE 1 END,
+                COALESCE(map.part_no, 0),
+                COALESCE(map.ayah_order, 0),
+                map.ayah_id
+            LIMIT 1
+        ) as map
+    ");
 
-                // If page 1 contains injected Bismillah, it consumes 1 slot
-                $baseOffset = max(0, $offset - $extra);
-                $baseLimit  = $perPage;
-
-                if ($page === 1 && $extra === 1) {
-                    $baseLimit = max(0, $perPage - 1);
-                }
-
-                // 4) Build a DISTINCT-ON subquery to get one ordered row per base ayah_id
-                // Postgres DISTINCT ON chooses "first row per ayah_id" according to ORDER BY
-                $distinctBaseAyahs = DB::table('mushaf_ayahs as ma')
-                    ->join('mushaf_ayah_to_ayah_map as map', 'map.mushaf_ayah_id', '=', 'ma.id')
-                    ->where('ma.qiraat_reading_id', '=', $qiraatReadingId)
-                    ->where('ma.surah_id', '=', $surah)
-                    ->selectRaw('DISTINCT ON (map.ayah_id) map.ayah_id, ma.number_in_surah as ord')
-                    ->orderBy('map.ayah_id') // required first for DISTINCT ON
-                    ->orderBy('ma.number_in_surah')
-                    ->orderByRaw('COALESCE(map.ayah_order, 0)')
-                    ->orderByRaw('COALESCE(map.part_no, 0)')
-                    ->orderBy('ma.id');
-
-                // Page those distinct base ayahs in surah order
-                $pagedBaseAyahs = DB::query()
-                    ->fromSub($distinctBaseAyahs, 'd')
-                    ->orderBy('d.ord')
-                    ->offset($baseOffset)
-                    ->limit($baseLimit);
-
-                // 5) Join the paged base-ayah list to Ayah, then let filterAyahs() do its merging
-                $ayahsQuery = Ayah::query()
-                    ->joinSub($pagedBaseAyahs, 'p', function ($join) {
-                        $join->on('ayahs.id', '=', 'p.ayah_id');
+                $query = DB::table('mushaf_ayahs as ma')
+                    ->leftJoin($lateral, DB::raw('TRUE'), DB::raw('TRUE'))
+                    ->leftJoin('ayah_edition as text_ae', function ($join) use ($validated) {
+                        $join->on('text_ae.ayah_id', '=', 'map.ayah_id')
+                            ->where('text_ae.edition_id', '=', (int) $validated['text_edition']);
                     })
-                    ->orderBy('p.ord')
-                    ->whereHas('surah', function ($q) use ($surah) {
-                        $q->where('id', $surah);
+                    ->leftJoin('ayah_edition as audio_ae', function ($join) use ($validated) {
+                        $join->on('audio_ae.ayah_id', '=', 'map.ayah_id')
+                            ->where('audio_ae.edition_id', '=', (int) $validated['audio_edition']);
+                    })
+                    ->where('ma.qiraat_reading_id', $qiraatReadingId)
+                    ->where('ma.surah_id', $surah);
+
+                if (!empty($validated['verse']) && (int) $validated['verse'] !== 0) {
+                    $query->where('ma.number_in_surah', (int) $validated['verse']);
+                }
+
+                if ($user) {
+                    $query->leftJoin('bookmarks as bm', function ($join) use ($user) {
+                        $join->on('bm.ayah_id', '=', 'map.ayah_id')
+                            ->where('bm.user_id', '=', $user->id);
                     });
-
-                // Important: we want only ayahs that actually map to this mushaf surah.
-                // applyMushafJoin() does LEFT JOINs; this WHERE forces the join to be "real".
-                // filterAyahs() will call applyMushafJoin() because mushafAlreadyJoined=false.
-                $ayahs = $this->filterAyahs($validated, $ayahsQuery);
-
-                if ($ayahs->isEmpty() && $page === 1) {
-                    return $this->apiError('Invalid Surah number or no matching Ayahs', 404);
                 }
 
-                // 6) Inject Bismillah only on page 1 (same behavior), BUT meta already includes it
-                $modified = collect();
+                $rows = $query
+                    ->orderBy('ma.number_in_surah')
+                    ->select([
+                        'ma.id as id',
+                        'ma.id as mushaf_ayah_id',
+                        DB::raw('map.ayah_id as base_ayah_id'),
 
-                if ($page === 1 && $hasBismillah) {
-                    $bismillahRow = $this->getBismillahRow($validated);
-                    if ($bismillahRow) {
-                        $b = clone $bismillahRow;
-                        $b->surah_id = $surah;
-                        $b->number_in_surah = 0;
-                        $this->applySurahNames($b);
-                        $b->tags = $this->getTagsForAyah($b, $user);
-                        $modified->push($b);
-                    }
-                }
+                        'ma.surah_id',
+                        'ma.page',
+                        'ma.juz_id',
+                        'ma.hizb_id',
+                        'ma.sajda',
+                        'ma.number_in_surah',
+                        'ma.text',
+                        'ma.pure_text',
 
-                foreach ($ayahs as $ayah) {
-                    $ayah->tags = $this->getTagsForAyah($ayah, $user);
-                    $modified->push($ayah);
-                }
+                        // Important: expose qiraat template in BOTH fields
+                        'ma.ayah_template as ayah_template',
+                        'ma.ayah_template as template',
+
+                        DB::raw('(SELECT s.name_ar FROM surahs s WHERE s.id = ma.surah_id LIMIT 1) AS surah_name_ar'),
+                        DB::raw('(SELECT s.name_en FROM surahs s WHERE s.id = ma.surah_id LIMIT 1) AS surah_name_en'),
+
+                        DB::raw('text_ae.data AS translation'),
+                        DB::raw('audio_ae.data AS audio'),
+
+                        $user
+                            ? DB::raw('CASE WHEN bm.ayah_id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked')
+                            : DB::raw('FALSE AS bookmarked'),
+                    ])
+                    ->skip(($page - 1) * $perPage)
+                    ->take($perPage)
+                    ->get();
+
+                $ayahs = collect($rows)->map(function ($r) use ($user) {
+                    $r->tags = $this->getTagsForAyahId(
+                        $r->base_ayah_id !== null ? (int) $r->base_ayah_id : null,
+                        $user
+                    );
+
+                    unset($r->mushaf_ayah_id);
+
+                    return $r;
+                });
 
                 return $this->apiSuccess([
                     'meta' => [
@@ -493,7 +502,7 @@ class QuranController extends Controller
                         'current_page' => $page,
                         'per_page' => $perPage,
                     ],
-                    'ayahs' => $modified,
+                    'ayahs' => $ayahs,
                 ], 'Surah retrieved successfully');
             }
 
@@ -833,7 +842,7 @@ class QuranController extends Controller
 
             // Prefer qiraat mushaf fields for non-base readings; keep base id for tags/bookmarks/translations.
             $mushafTextParts = array_values(array_unique(array_filter(array_map(
-                fn (array $part) => $part['text'] ?? null,
+                fn(array $part) => $part['text'] ?? null,
                 $parts
             ))));
             if (count($mushafTextParts) > 0) {
@@ -841,7 +850,7 @@ class QuranController extends Controller
             }
 
             $mushafPureTextParts = array_values(array_unique(array_filter(array_map(
-                fn (array $part) => $part['pure_text'] ?? null,
+                fn(array $part) => $part['pure_text'] ?? null,
                 $parts
             ))));
             if (count($mushafPureTextParts) > 0) {
@@ -854,7 +863,10 @@ class QuranController extends Controller
             $ayah->hizb_id = $ayah->mushaf_hizb_id ?? $ayah->hizb_id;
             $ayah->sajda = $ayah->mushaf_sajda ?? $ayah->sajda;
 
-            $ayah->template = $ayah->mushaf_ayah_template ?: $ayah->base_ayah_template;
+            $mushafTemplate = $ayah->mushaf_ayah_template ?: $ayah->base_ayah_template;
+
+            $ayah->template = $mushafTemplate;
+            $ayah->ayah_template = $mushafTemplate;
 
             // Clean up temporary fields
             unset(
