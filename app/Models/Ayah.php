@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $surah_id
  * @property int $hizb_id
  * @property int $juz_id
- * @property int $sajda
+ * @property bool $sajda
  * @property string|null $ayah_template
  *
  * @property Surah $surah
@@ -34,22 +34,22 @@ class Ayah extends Model
 {
 	protected $table = 'ayahs';
 
-    public $timestamps = false; // Disable automatic timestamps
+	public $timestamps = false; // Disable automatic timestamps
 
 	protected $casts = [
-        'id' => 'int',
+		'id' => 'int',
 		'number' => 'int',
 		'number_in_surah' => 'int',
 		'page' => 'int',
 		'surah_id' => 'int',
 		'hizb_id' => 'int',
 		'juz_id' => 'int',
-		'sajda' => 'int'
+		'sajda' => 'bool'
 	];
 
 	protected $fillable = [
 		'ayah_template',
-        'pure_text'
+		'pure_text'
 	];
 
 	public function surah()
@@ -60,9 +60,9 @@ class Ayah extends Model
 	public function tags()
 	{
 		return $this->belongsToMany(Tag::class, 'ayah_tags')
-					->withPivot('id', 'notes', 'created_by', 'updated_by', 'approved_by', 'approved_at')
-					->withTimestamps()
-                    ->without('pivot');
+			->withPivot('id', 'notes', 'created_by', 'updated_by', 'approved_by', 'approved_at')
+			->withTimestamps()
+			->without('pivot');
 	}
 
 	public function words()
@@ -73,12 +73,12 @@ class Ayah extends Model
 	public function editions()
 	{
 		return $this->belongsToMany(Edition::class)
-					->withPivot('id', 'data', 'is_audio')
-					->withTimestamps();
+			->withPivot('id', 'data', 'is_audio')
+			->withTimestamps();
 	}
 
-    public function bookmarks()
-    {
-        return $this->hasMany(Bookmark::class, 'ayah_id', 'id');
-    }
+	public function bookmarks()
+	{
+		return $this->hasMany(Bookmark::class, 'ayah_id', 'id');
+	}
 }
