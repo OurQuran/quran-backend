@@ -39,7 +39,7 @@ class TagController extends Controller
         $user = $this->checkLoginToken();
 
         if (!empty($validated['user_id'])) {
-            if ($validated['user_id'] == $user->id || $user->role == 'superadmin' || $user->role == 'admin')
+            if ($user && ($validated['user_id'] == $user->id || $user->isAdmin()))
                 $query->whereRaw('created_by = ?', ["{$validated['user_id']}"]);
             else
                 return $this->apiError('You do not have the permission to view this', 403);
@@ -125,6 +125,12 @@ class TagController extends Controller
 
     public function update(Request $request, Tag $tag)
     {
+        $user = $this->checkLoginToken();
+
+        if (!$user->isAdmin() && $tag->created_by !== $user->id) {
+            return $this->apiError('You do not have permission to update this tag', 403);
+        }
+
         $validated = $request->validate([
             'parent_id' => 'sometimes|nullable|int|exists:tags,id',
             'name' => 'sometimes|nullable|string|unique:tags,name',
@@ -137,6 +143,12 @@ class TagController extends Controller
 
     public function destroy(Tag $tag)
     {
+        $user = $this->checkLoginToken();
+
+        if (!$user->isAdmin() && $tag->created_by !== $user->id) {
+            return $this->apiError('You do not have permission to delete this tag', 403);
+        }
+
         $tag->delete();
         return $this->apiSuccess(null, 'Tag deleted successfully');
     }
@@ -494,7 +506,7 @@ class TagController extends Controller
         // Fetch ayah
         $ayah = Ayah::query();
 
-        if (Auth::user()->role == 'admin' || Auth::user()->role == 'superadmin') {
+        if (Auth::user()->isAdmin()) {
             $ayah->where('id', $validated['ayah_id'])
                 ->first();
         } else {

@@ -991,15 +991,18 @@ class QuranController extends Controller
             'ayah_tags.approved_by'
         );
 
-        if ($user && in_array($user->role, ['admin', 'superadmin'])) {
+        if ($user && $user->isAdmin()) {
             // admins see all
         } else {
             $tagsQuery->where(function ($query) use ($user) {
                 $query->whereExists(function ($subquery) {
                     $subquery->select(DB::raw(1))
-                        ->from('users')
-                        ->whereColumn('users.id', '=', 'tags.created_by')
-                        ->whereIn('users.role', ['admin', 'superadmin']);
+                        ->from('model_has_roles')
+                        ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                        ->whereColumn('model_has_roles.model_id', '=', 'tags.created_by')
+                        ->where('model_has_roles.model_type', User::class)
+                        ->where('roles.guard_name', 'api')
+                        ->whereIn('roles.name', ['admin', 'superadmin']);
                 });
 
                 if ($user) {

@@ -6,15 +6,15 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('tags')->group(function () {
     Route::get('/', [TagController::class, 'index']);
     Route::post('/', [TagController::class, 'store'])->middleware('auth:sanctum');
-    Route::get('/unapproved', [TagController::class, 'getUnapprovedTags'])->middleware('auth:sanctum');
+    Route::get('/unapproved', [TagController::class, 'getUnapprovedTags'])->middleware(['auth:sanctum', 'permission:tags.moderate,api']);
     Route::get('/search', [TagController::class, 'searchTags']);
-    Route::get('/dashboard', [TagController::class, 'tagsDashboard'])->middleware(['auth:sanctum', 'role:superadmin,admin']);
+    Route::get('/dashboard', [TagController::class, 'tagsDashboard'])->middleware(['auth:sanctum', 'permission:tags.moderate,api']);
     Route::get('/{tag}', [TagController::class, 'show']);
     Route::put('/{tag}', [TagController::class, 'update'])->middleware('auth:sanctum');
     Route::delete('/{tag}', [TagController::class, 'destroy'])->middleware('auth:sanctum');
 
-    Route::post('/approve', [TagController::class, 'approve'])->middleware(['auth:sanctum', 'role:superadmin,admin']);
-    Route::post('/unapprove', [TagController::class, 'unapprove'])->middleware(['auth:sanctum', 'role:superadmin,admin']);
+    Route::post('/approve', [TagController::class, 'approve'])->middleware(['auth:sanctum', 'permission:tags.moderate,api']);
+    Route::post('/unapprove', [TagController::class, 'unapprove'])->middleware(['auth:sanctum', 'permission:tags.moderate,api']);
     Route::post('/attach', [TagController::class, 'attachAyahTag'])->middleware('auth:sanctum');
     Route::post('/unattach', [TagController::class, 'unattachAyahTag'])->middleware('auth:sanctum');
     Route::post('/create-and-attach', [TagController::class, 'createTagAndAttachToAyah'])->middleware('auth:sanctum');

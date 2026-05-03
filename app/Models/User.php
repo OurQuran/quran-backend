@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Spatie\Permission\Traits\HasRoles;
 /**
  * Class User
  *
@@ -33,9 +34,10 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  */
 class User extends Authenticatable
 {
-    use HasApiTokens, SoftDeletes;
+    use HasApiTokens, HasRoles, SoftDeletes;
 
     protected $table = 'users';
+    protected string $guard_name = 'api';
 
     protected $fillable = [
         'name',
@@ -69,7 +71,12 @@ class User extends Authenticatable
 
     public function hasRoles(...$roles): bool
     {
-        return in_array($this->role, $roles);
+        return $this->hasAnyRole($roles);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->hasAnyRole(['admin', 'superadmin']);
     }
 
 }

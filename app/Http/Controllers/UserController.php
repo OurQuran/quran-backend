@@ -66,6 +66,7 @@ class UserController extends Controller
             'password' => Hash::make($validated['password']),
             'role' => $validated['role']
         ]);
+        $user->assignRole($validated['role']);
 
         return $this->apiSuccess($user, "User created successfully", 201);
     }
@@ -84,7 +85,7 @@ class UserController extends Controller
             'role' => 'sometimes|string|in:user,admin'
         ]);
 
-        if ($user->role === 'superadmin' && $validated['role']) {
+        if ($user->hasRole('superadmin') && isset($validated['role'])) {
             return $this->apiError('This user\'s role cannot be updated', 404);
         }
 
@@ -93,12 +94,17 @@ class UserController extends Controller
         }
 
         $user->update($validated);
+
+        if (isset($validated['role'])) {
+            $user->syncRoles([$validated['role']]);
+        }
+
         return $this->apiSuccess(null, "User updated successfully");
     }
 
     public function destroy(User $user)
     {
-        if ($user->role === 'superadmin') {
+        if ($user->hasRole('superadmin')) {
             return $this->apiError('User not found', 404);
         }
 
@@ -168,6 +174,7 @@ class UserController extends Controller
             'password' => Hash::make($validated['password']),
             'role' => 'user',
         ]);
+        $user->assignRole('user');
 
         // 4) Log them in *directly* with the model
         Auth::login($user, true);
@@ -204,11 +211,13 @@ class UserController extends Controller
             return $this->apiError("Password doesn't match current password");
         }
 
-        User::query()
-            ->where('id', Auth::id())
-            ->whereNot('role', 'superadmin')
-            ->firstOrFail()
-            ->delete();
+        $user = Auth::user();
+
+        if ($user->hasRole('superadmin')) {
+            return $this->apiError('User not found', 404);
+        }
+
+        $user->delete();
 
         return $this->apiSuccess(null, "Account deleted successfully");
     }
