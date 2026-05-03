@@ -7,7 +7,6 @@ use App\Models\AyahTag;
 use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 
 class TagController extends Controller
 {
@@ -234,8 +233,8 @@ class TagController extends Controller
         $unapprovedTagsQuery = AyahTag::query()
             ->with([
                 'ayah',
-                'tag.creator:id,name,username,role',
-                'tag.updater:id,name,username,role',
+                'tag.creator:id,name,username',
+                'tag.updater:id,name,username',
             ])
             ->where(function($query) {
                 $query->whereNull('approved_by')
@@ -626,14 +625,14 @@ class TagController extends Controller
         $query = Tag::query()
             ->select('id', 'name', 'parent_id', 'created_by', 'updated_by')
             ->with([
-                'creator:id,name,username,role',
-                'updater:id,name,username,role',
+                'creator:id,name,username',
+                'updater:id,name,username',
                 'parent' => function($q) {
                     $q->select('id', 'name', 'parent_id', 'created_by', 'updated_by')
                         ->withCount('allChildren as children_count');
                 },
-                'parent.creator:id,name,username,role',
-                'parent.updater:id,name,username,role'
+                'parent.creator:id,name,username',
+                'parent.updater:id,name,username'
             ])
             ->withCount('allChildren as children_count');
 
@@ -673,7 +672,7 @@ class TagController extends Controller
     /**
      * Recursively set ayahs as an empty array for all children if not already set.
      */
-    private function addEmptyAyahsToChildren($children)
+    private function addEmptyAyahsToChildren(\Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Collection $children): void
     {
         foreach ($children as $child) {
             if (!$child->relationLoaded('ayahs') || $child->ayahs->isEmpty()) {

@@ -57,14 +57,13 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'username' => 'required|string|max:255|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|string|in:user,admin'
+            'role' => 'required|string|in:user,admin',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'username' => $validated['username'],
             'password' => Hash::make($validated['password']),
-            'role' => $validated['role']
         ]);
         $user->assignRole($validated['role']);
 
@@ -82,22 +81,13 @@ class UserController extends Controller
             'name' => 'sometimes|string|max:255',
             'username' => 'sometimes|string|max:255|unique:users,username,' . $user->id,
             'password' => 'sometimes|string|min:6',
-            'role' => 'sometimes|string|in:user,admin'
         ]);
-
-        if ($user->hasRole('superadmin') && isset($validated['role'])) {
-            return $this->apiError('This user\'s role cannot be updated', 404);
-        }
 
         if (isset($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         }
 
         $user->update($validated);
-
-        if (isset($validated['role'])) {
-            $user->syncRoles([$validated['role']]);
-        }
 
         return $this->apiSuccess(null, "User updated successfully");
     }
@@ -172,7 +162,6 @@ class UserController extends Controller
             'name' => $validated['name'],
             'username' => $validated['username'],
             'password' => Hash::make($validated['password']),
-            'role' => 'user',
         ]);
         $user->assignRole('user');
 
