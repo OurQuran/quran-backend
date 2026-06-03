@@ -72,15 +72,11 @@ class TagController extends Controller
         ]);
 
         $tag = Tag::create([
-            'name' => $validated['name'],
+            'name'       => $validated['name'],
+            'parent_id'  => ($validated['parent_id'] ?? null) ?: null,
             'created_by' => Auth::id(),
             'updated_by' => Auth::id(),
         ]);
-
-        if (isset($validated['parent_id']) && $validated['parent_id'] !== 0) {
-            $tag->parent_id = $validated['parent_id'];
-            $tag->save();
-        }
 
         return $this->apiSuccess($tag, 'Tag created successfully', 201);
     }
@@ -503,16 +499,13 @@ class TagController extends Controller
         }
 
         // Fetch ayah
-        $ayah = Ayah::query();
+        $ayahQuery = Ayah::where('id', '=', $validated['ayah_id'], 'and');
 
-        if (Auth::user()->isAdmin()) {
-            $ayah->where('id', $validated['ayah_id'])
-                ->first();
-        } else {
-            $ayah->where('id', $validated['ayah_id'])
-                ->where('createdBy', Auth::id())
-                ->first();
+        if (!Auth::user()->isAdmin()) {
+            $ayahQuery->where('created_by', '=', Auth::id(), 'and');
         }
+
+        $ayah = $ayahQuery->first();
 
         if (!$ayah) {
             return $this->apiError("Ayah with ID {$validated['ayah_id']} not found.", 404);
