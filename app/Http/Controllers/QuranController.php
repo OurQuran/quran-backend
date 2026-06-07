@@ -2,10 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\SurahRequest;
 use App\Models\Ayah;
 use App\Models\Edition;
-use App\Models\MushafAyah;
 use App\Models\QiraatReading;
 use App\Models\Surah;
 use App\Models\User;
@@ -21,7 +19,6 @@ use Illuminate\Support\Facades\Http;
 
 class QuranController extends Controller
 {
-
     // todo: Edition Languages (todo, group by the language identifier for easier frontend fetch)
     public function languages()
     {
@@ -30,9 +27,10 @@ class QuranController extends Controller
 
             return $this->apiSuccess($editions, 'Languages retrieved successfully');
         } catch (Exception $e) {
-            return $this->apiError('Failed to retrieve languages: ' . $e->getMessage());
+            return $this->apiError('Failed to retrieve languages: '.$e->getMessage());
         }
     }
+
     public function readings(): JsonResponse
     {
         try {
@@ -43,7 +41,7 @@ class QuranController extends Controller
 
             return $this->apiSuccess($readings, 'Qiraat readings retrieved successfully');
         } catch (Exception $e) {
-            return $this->apiError('Failed to retrieve qiraat readings: ' . $e->getMessage());
+            return $this->apiError('Failed to retrieve qiraat readings: '.$e->getMessage());
         }
     }
 
@@ -51,6 +49,7 @@ class QuranController extends Controller
     {
         try {
             $editions = Edition::query()->get();
+
             return $this->apiSuccess($editions, 'Editions retrieved successfully');
         } catch (Exception $e) {
             return $this->apiError('Failed to retrieve editions');
@@ -66,19 +65,19 @@ class QuranController extends Controller
                     'sometimes',
                     'nullable',
                     function ($attribute, $value, $fail) {
-                        if ($value !== '' && !in_array(strtolower($value), ['meccan', 'medinan'])) {
+                        if ($value !== '' && ! in_array(strtolower($value), ['meccan', 'medinan'])) {
                             $fail("The $attribute must be either 'meccan' or 'medinan'.");
                         }
-                    }
+                    },
                 ],
                 'revelation_order' => [
                     'sometimes',
                     'nullable',
                     function ($attribute, $value, $fail) {
-                        if ($value !== '' && !in_array(strtolower($value), ['asc', 'desc'])) {
+                        if ($value !== '' && ! in_array(strtolower($value), ['asc', 'desc'])) {
                             $fail("The $attribute must be either 'asc' or 'desc'.");
                         }
-                    }
+                    },
                 ],
                 'name' => 'sometimes|nullable|string',
             ]);
@@ -98,20 +97,21 @@ class QuranController extends Controller
                     'ayahs.juz_id'
                 );
 
-            if (!empty($validated['surah'])) {
+            if (! empty($validated['surah'])) {
                 $surah = $query->where('surahs.id', $validated['surah'])->firstOrFail();
+
                 return $this->apiSuccess($surah, 'Surah retrieved successfully');
             }
 
-            if (!empty($validated['type'])) {
+            if (! empty($validated['type'])) {
                 $query->where('surahs.type', 'ILIKE', "%{$validated['type']}%");
             }
 
-            if (!empty($validated['revelation_order'])) {
+            if (! empty($validated['revelation_order'])) {
                 $query->orderBy('surahs.number', $validated['revelation_order']);
             }
 
-            if (!empty($validated['name'])) {
+            if (! empty($validated['name'])) {
                 $query->where(function ($q) use ($validated) {
                     $q->where('surahs.name_en', 'ILIKE', "%{$validated['name']}%")
                         ->orWhere('surahs.name_ar', 'ILIKE', "%{$validated['name']}%")
@@ -123,7 +123,7 @@ class QuranController extends Controller
 
             return $this->apiSuccess($surahs, 'Surahs retrieved successfully');
         } catch (Exception $e) {
-            return $this->apiError("Failed to retrieve Surahs: " . $e->getMessage());
+            return $this->apiError('Failed to retrieve Surahs: '.$e->getMessage());
         }
     }
 
@@ -150,7 +150,7 @@ class QuranController extends Controller
             // =========================
             // MUSHAF MODE (qiraat > 1)
             // =========================
-            if (!$this->usesBaseAyahs($qiraatReadingId)) {
+            if (! $this->usesBaseAyahs($qiraatReadingId)) {
                 // total mushaf ayahs on that mushaf page for that qiraat
                 $totalCount = DB::table('mushaf_ayahs as ma')
                     ->where('ma.qiraat_reading_id', $qiraatReadingId)
@@ -196,8 +196,8 @@ class QuranController extends Controller
                 }
 
                 // optional verse filter in mushaf mode (by mushaf number_in_surah)
-                if (!empty($validated['verse']) && (int)$validated['verse'] !== 0) {
-                    $query->where('ma.number_in_surah', (int)$validated['verse']);
+                if (! empty($validated['verse']) && (int) $validated['verse'] !== 0) {
+                    $query->where('ma.number_in_surah', (int) $validated['verse']);
                 }
 
                 $rows = $query
@@ -303,10 +303,9 @@ class QuranController extends Controller
                 'ayahs' => $modified,
             ], 'Page retrieved successfully');
         } catch (Exception $e) {
-            return $this->apiError('Failed to retrieve page: ' . $e->getMessage());
+            return $this->apiError('Failed to retrieve page: '.$e->getMessage());
         }
     }
-
 
     /**
      * GET /.../juz/{juz}
@@ -326,8 +325,8 @@ class QuranController extends Controller
             $validated = $this->withDefaults($validated);
             $user = $this->checkLoginToken();
 
-            $page = (int)$validated['page'];
-            $perPage = (int)$validated['per_page'];
+            $page = (int) $validated['page'];
+            $perPage = (int) $validated['per_page'];
 
             $totalCount = Ayah::query()->where('juz_id', $juz)->count();
             if ($totalCount === 0) {
@@ -351,7 +350,7 @@ class QuranController extends Controller
             $bismillahRow = $this->getBismillahRow($validated);
             $modified = $this->injectBismillahPerAyahList($ayahs, $bismillahRow, $user, mode: 'juz');
 
-            $totalPages = (int)ceil($totalCount / $perPage);
+            $totalPages = (int) ceil($totalCount / $perPage);
 
             return $this->apiSuccess([
                 'meta' => [
@@ -363,7 +362,7 @@ class QuranController extends Controller
                 'ayahs' => $modified,
             ], 'Juz retrieved successfully');
         } catch (Exception $e) {
-            return $this->apiError("Failed to retrieve Juz: " . $e->getMessage());
+            return $this->apiError('Failed to retrieve Juz: '.$e->getMessage());
         }
     }
 
@@ -389,14 +388,14 @@ class QuranController extends Controller
             $perPage = (int) $validated['per_page'];
             $qiraatReadingId = (int) $validated['qiraat_reading_id'];
 
-            $useMushaf = !$this->usesBaseAyahs($qiraatReadingId);
+            $useMushaf = ! $this->usesBaseAyahs($qiraatReadingId);
 
             if ($useMushaf) {
                 $queryBase = DB::table('mushaf_ayahs as ma')
                     ->where('ma.qiraat_reading_id', $qiraatReadingId)
                     ->where('ma.surah_id', $surah);
 
-                if (!empty($validated['verse']) && (int) $validated['verse'] !== 0) {
+                if (! empty($validated['verse']) && (int) $validated['verse'] !== 0) {
                     $queryBase->where('ma.number_in_surah', (int) $validated['verse']);
                 }
 
@@ -439,7 +438,7 @@ class QuranController extends Controller
                     ->where('ma.qiraat_reading_id', $qiraatReadingId)
                     ->where('ma.surah_id', $surah);
 
-                if (!empty($validated['verse']) && (int) $validated['verse'] !== 0) {
+                if (! empty($validated['verse']) && (int) $validated['verse'] !== 0) {
                     $query->where('ma.number_in_surah', (int) $validated['verse']);
                 }
 
@@ -557,7 +556,7 @@ class QuranController extends Controller
                 'ayahs' => $modifiedAyahs,
             ], 'Surah retrieved successfully');
         } catch (Exception $e) {
-            return $this->apiError("Failed to retrieve Surah: " . $e->getMessage());
+            return $this->apiError('Failed to retrieve Surah: '.$e->getMessage());
         }
     }
 
@@ -567,6 +566,24 @@ class QuranController extends Controller
 
     /**
      * GET /.../search?q=...&type=exact|semantic
+     */
+    /**
+     * Max number of candidate ayahs a single search ranks before pagination.
+     * Both search modes return a relevance-ordered id list capped at this size.
+     */
+    private const SEARCH_CANDIDATE_CAP = 300;
+
+    /**
+     * GET /search?q=...&type=exact|semantic
+     *
+     * Two search modes, both ranked then hydrated through the shared ayah
+     * pipeline (editions / qiraat / tags), preserving relevance order:
+     *
+     *   - exact:    pure SQL in Postgres (pg_trgm). No AI service involved.
+     *               Query is diacritic-normalized and matched against pure_text.
+     *   - semantic: the user query is embedded by the Python AI service
+     *               (POST /embed), then ranked against ayahs.embedding with
+     *               pgvector's cosine-distance operator (<=>).
      */
     public function search(Request $request): JsonResponse
     {
@@ -583,43 +600,53 @@ class QuranController extends Controller
 
             $validated = $this->withDefaults($validated);
 
-            $page = (int)$validated['page'];
-            $perPage = (int)$validated['per_page'];
+            $page = (int) $validated['page'];
+            $perPage = (int) $validated['per_page'];
 
-            $result = Http::post(
-                rtrim((string)env('AI_URL'), '/') . "/{$validated['type']}_search",
-                ['query' => $validated['q']]
-            );
+            // Relevance-ordered ayah ids (most relevant first), capped.
+            $rankedIds = $validated['type'] === 'semantic'
+                ? $this->semanticSearchIds($validated['q'])
+                : $this->exactSearchIds($validated['q']);
 
-            $json = json_decode((string)$result->body());
-
-            if (!$json || !isset($json->ayah_ids) || !is_array($json->ayah_ids)) {
-                return $this->apiError('AI search service returned invalid response', 500);
+            // Only semantic search can fail externally (AI service down).
+            if ($rankedIds === null) {
+                return $this->apiError('Semantic search service is unavailable', 503);
             }
 
-            $ids = $json->ayah_ids;
-            $user = $this->checkLoginToken();
+            $totalCount = count($rankedIds);
+            $totalPages = (int) ceil($totalCount / $perPage);
 
-            $query = Ayah::query()
-                ->whereIn('ayahs.id', $ids)
-                ->join('surahs', 'ayahs.surah_id', '=', 'surahs.id')
-                ->select(
-                    'ayahs.*',
-                    'surahs.name_en as surah_name_en',
-                    'surahs.name_ar as surah_name_ar'
-                );
+            // Page slice of the ranked ids, preserving relevance order.
+            $pageIds = array_slice($rankedIds, ($page - 1) * $perPage, $perPage);
 
-            $totalCount = (int)$query->count('ayahs.id');
-            $totalPages = (int)ceil($totalCount / $perPage);
+            $ayahs = new EloquentCollection;
 
-            $query->skip(($page - 1) * $perPage)->take($perPage);
+            if (! empty($pageIds)) {
+                $user = $this->checkLoginToken();
 
-            $ayahs = $this->filterAyahs($validated, $query);
+                $query = Ayah::query()->whereIn('ayahs.id', $pageIds);
 
-            foreach ($ayahs as $ayah) {
-                $filteredTags = $this->getTagsForAyah($ayah, $user);
-                $ayah->tags = $filteredTags->map(fn($tag) => ['id' => $tag->id, 'name' => $tag->name]);
-                unset($ayah->surah);
+                $ayahs = $this->filterAyahs($validated, $query);
+
+                // whereIn() does not preserve order; restore relevance ranking.
+                $rank = array_flip($pageIds);
+                $ayahs = $ayahs
+                    ->sortBy(fn ($ayah) => $rank[$ayah->id] ?? PHP_INT_MAX)
+                    ->values();
+
+                foreach ($ayahs as $ayah) {
+                    $filteredTags = $this->getTagsForAyah($ayah, $user);
+                    $ayah->tags = $filteredTags->map(fn ($tag) => ['id' => $tag->id, 'name' => $tag->name]);
+                    unset($ayah->surah);
+
+                    // Tag the word-spans that match the query so the frontend can
+                    // colour them (class "search-match"). Applies to both modes.
+                    foreach (['template', 'ayah_template', 'mushaf_ayah_template'] as $field) {
+                        if (! empty($ayah->{$field})) {
+                            $ayah->{$field} = $this->highlightSearchMatches($ayah->{$field}, $validated['q']);
+                        }
+                    }
+                }
             }
 
             return $this->apiSuccess([
@@ -632,8 +659,156 @@ class QuranController extends Controller
                 'result' => $ayahs,
             ], 'Search completed.');
         } catch (Exception $e) {
-            return $this->apiError('Failed to perform search: ' . $e->getMessage());
+            return $this->apiError('Failed to perform search: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Exact / lexical search, entirely in Postgres via pg_trgm.
+     *
+     * The query is diacritic-normalized and matched (substring) against the
+     * stripped `pure_text`, with the raw `text` as a fallback, then ranked by
+     * trigram similarity. Returns ayah ids ordered most-relevant first.
+     */
+    private function exactSearchIds(string $q): array
+    {
+        $needle = normalizeArabicForSearch($q);
+
+        if ($needle === '') {
+            return [];
+        }
+
+        // Match against either normalized form of the uthmani text (see the
+        // pg_trgm migration): _del deletes the dagger-alef ("الرحمن"), _keep
+        // turns it into a full alef ("القيامة", "الصابرين"). A query matches if
+        // it is a substring of either. Both function calls are backed by
+        // functional GIN trigram indexes, and we rank by the better similarity.
+        $like = '%'.$needle.'%';
+
+        $ids = DB::table('ayahs')
+            ->select('id')
+            ->whereRaw('quran_search_norm_del(text) ILIKE ? OR quran_search_norm_keep(text) ILIKE ?', [$like, $like])
+            ->orderByRaw('GREATEST(similarity(quran_search_norm_del(text), ?), similarity(quran_search_norm_keep(text), ?)) DESC', [$needle, $needle])
+            ->orderBy('id')
+            ->limit(self::SEARCH_CANDIDATE_CAP)
+            ->pluck('id')
+            ->all();
+
+        return array_map('intval', $ids);
+    }
+
+    /**
+     * Semantic search via pgvector.
+     *
+     * Embeds the user query through the AI service, then ranks ayahs by cosine
+     * distance against the stored embeddings. Returns ayah ids ordered
+     * most-relevant first, or null if the embedding service is unavailable.
+     */
+    private function semanticSearchIds(string $q): ?array
+    {
+        $vector = $this->embedQuery($q);
+
+        if ($vector === null) {
+            return null;
+        }
+
+        // pgvector text literal, e.g. "[0.1,0.2,...]", cast to vector in SQL.
+        $literal = '['.implode(',', $vector).']';
+
+        $ids = DB::table('ayahs')
+            ->select('id')
+            ->whereNotNull('embedding')
+            ->orderByRaw('embedding <=> ?::vector', [$literal])
+            ->limit(self::SEARCH_CANDIDATE_CAP)
+            ->pluck('id')
+            ->all();
+
+        return array_map('intval', $ids);
+    }
+
+    /**
+     * Ask the Python AI service to embed a single piece of text.
+     * Returns the vector as a float array, or null on any failure.
+     */
+    private function embedQuery(string $q): ?array
+    {
+        $base = rtrim((string) config('services.ai.url'), '/');
+
+        if ($base === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout((int) config('services.ai.timeout', 15))
+                ->acceptJson()
+                ->post($base.'/embed', ['text' => $q]);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $vector = $response->json('vector');
+
+        if (! is_array($vector) || $vector === []) {
+            return null;
+        }
+
+        return array_map('floatval', $vector);
+    }
+
+    /**
+     * Add class="search-match" to the word-spans of an ayah template whose word
+     * matches the search query, so the frontend can highlight them (e.g. red).
+     *
+     * Each word in the template is its own <span id="...">word</span>. A word
+     * matches if its diacritic-normalized form (checked in both the dagger-alef
+     * "del" and "keep" forms, mirroring exact search) contains any normalized
+     * query token. Applied to exact AND semantic results — for semantic, it
+     * simply highlights literal occurrences of the query word where they appear.
+     */
+    private function highlightSearchMatches(string $template, string $q): string
+    {
+        // Normalized query tokens; ignore 1-char tokens to avoid noise.
+        $tokens = array_values(array_filter(
+            explode(' ', normalizeArabicForSearch($q)),
+            fn ($t) => mb_strlen($t) >= 2
+        ));
+
+        if (empty($tokens)) {
+            return $template;
+        }
+
+        return preg_replace_callback('/<span\b([^>]*)>(.*?)<\/span>/us', function ($m) use ($tokens) {
+            $attrs = $m[1];
+            $inner = $m[2];
+
+            $wordDel = normalizeArabicForSearch($inner);
+            $wordKeep = normalizeArabicForSearch($inner, true);
+
+            $matched = false;
+            foreach ($tokens as $tok) {
+                if (($wordDel !== '' && mb_strpos($wordDel, $tok) !== false)
+                    || ($wordKeep !== '' && mb_strpos($wordKeep, $tok) !== false)) {
+                    $matched = true;
+                    break;
+                }
+            }
+
+            if (! $matched) {
+                return $m[0];
+            }
+
+            if (preg_match('/\bclass\s*=\s*"([^"]*)"/', $attrs)) {
+                $attrs = preg_replace('/\bclass\s*=\s*"([^"]*)"/', 'class="$1 search-match"', $attrs);
+            } else {
+                $attrs .= ' class="search-match"';
+            }
+
+            return '<span'.$attrs.'>'.$inner.'</span>';
+        }, $template);
     }
 
     public function getSurahByAyah(Request $request, int $ayah): JsonResponse
@@ -658,24 +833,25 @@ class QuranController extends Controller
 
             return $this->apiSuccess($surah, 'Surah retrieved successfully');
         } catch (Exception $e) {
-            return $this->apiError('Failed to retrieve Surah by Ayah: ' . $e->getMessage());
+            return $this->apiError('Failed to retrieve Surah by Ayah: '.$e->getMessage());
         }
     }
 
     public function qiraats()
     {
         $qiraats = QiraatReading::all();
+
         return $this->apiSuccess($qiraats, 'Qiraats retrieved successfully');
     }
 
     private function withDefaults(array $validated): array
     {
-        $validated['page'] = (int)($validated['page'] ?? 1);
-        $validated['per_page'] = (int)($validated['per_page'] ?? 20);
-        $validated['text_edition'] = (int)($validated['text_edition'] ?? 1);
-        $validated['audio_edition'] = (int)($validated['audio_edition'] ?? 110);
-        $validated['qiraat_reading_id'] = (int)($validated['qiraat_reading_id'] ?? QiraatImportMaps::baseReadingId());
-        $validated['verse'] = (int)($validated['verse'] ?? 0);
+        $validated['page'] = (int) ($validated['page'] ?? 1);
+        $validated['per_page'] = (int) ($validated['per_page'] ?? 20);
+        $validated['text_edition'] = (int) ($validated['text_edition'] ?? 1);
+        $validated['audio_edition'] = (int) ($validated['audio_edition'] ?? 110);
+        $validated['qiraat_reading_id'] = (int) ($validated['qiraat_reading_id'] ?? QiraatImportMaps::baseReadingId());
+        $validated['verse'] = (int) ($validated['verse'] ?? 0);
 
         return $validated;
     }
@@ -688,12 +864,12 @@ class QuranController extends Controller
      */
     private function filterAyahs(array $validated, Builder $ayahsQuery, bool $mushafAlreadyJoined = false): EloquentCollection
     {
-        $textEdition = (int)$validated['text_edition'];
-        $audioEdition = (int)$validated['audio_edition'];
-        $qiraatReadingId = (int)$validated['qiraat_reading_id'];
+        $textEdition = (int) $validated['text_edition'];
+        $audioEdition = (int) $validated['audio_edition'];
+        $qiraatReadingId = (int) $validated['qiraat_reading_id'];
 
-        if (!empty($validated['verse']) && (int)$validated['verse'] !== 0) {
-            $ayahsQuery->where('ayahs.number_in_surah', (int)$validated['verse']);
+        if (! empty($validated['verse']) && (int) $validated['verse'] !== 0) {
+            $ayahsQuery->where('ayahs.number_in_surah', (int) $validated['verse']);
         }
 
         // ✅ BASE MODE: qiraat=1 => NO mushaf joins, NO mushaf merge
@@ -722,7 +898,7 @@ class QuranController extends Controller
         }
 
         // ✅ MUSHAF MODE: qiraat>1 => do joins + merge
-        if (!$mushafAlreadyJoined) {
+        if (! $mushafAlreadyJoined) {
             $this->applyMushafJoin($ayahsQuery, $qiraatReadingId);
         }
 
@@ -797,7 +973,7 @@ class QuranController extends Controller
                 $join->on('bookmarks.ayah_id', '=', 'ayahs.id')
                     ->where('bookmarks.user_id', '=', $user->id);
             })
-                ->addSelect([DB::raw("CASE WHEN bookmarks.ayah_id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked")]);
+                ->addSelect([DB::raw('CASE WHEN bookmarks.ayah_id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked')]);
         } else {
             $ayahsQuery->addSelect([DB::raw('FALSE AS bookmarked')]);
         }
@@ -809,28 +985,28 @@ class QuranController extends Controller
         $byId = [];
 
         foreach ($rows as $row) {
-            $ayahId = (int)$row->id;
+            $ayahId = (int) $row->id;
 
-            if (!isset($byId[$ayahId])) {
+            if (! isset($byId[$ayahId])) {
                 $byId[$ayahId] = [
                     'model' => $row,
-                    'parts' => []
+                    'parts' => [],
                 ];
             }
 
-            if (!empty($row->mushaf_ayah_id)) {
+            if (! empty($row->mushaf_ayah_id)) {
                 $byId[$ayahId]['parts'][] = [
-                    'mushaf_ayah_id' => (int)$row->mushaf_ayah_id,
+                    'mushaf_ayah_id' => (int) $row->mushaf_ayah_id,
                     'text' => $row->mushaf_text,
                     'pure_text' => $row->mushaf_pure_text,
                     'map_type' => $row->mushaf_map_type,
-                    'part_no' => $row->mushaf_part_no !== null ? (int)$row->mushaf_part_no : null,
-                    'parts_total' => $row->mushaf_parts_total !== null ? (int)$row->mushaf_parts_total : null,
-                    'ayah_order' => $row->mushaf_ayah_order !== null ? (int)$row->mushaf_ayah_order : null,
-                    'mushaf_page' => $row->mushaf_page !== null ? (int)$row->mushaf_page : null,
-                    'mushaf_juz_id' => $row->mushaf_juz_id !== null ? (int)$row->mushaf_juz_id : null,
-                    'mushaf_hizb_id' => $row->mushaf_hizb_id !== null ? (int)$row->mushaf_hizb_id : null,
-                    'mushaf_sajda' => $row->mushaf_sajda !== null ? (bool)$row->mushaf_sajda : null,
+                    'part_no' => $row->mushaf_part_no !== null ? (int) $row->mushaf_part_no : null,
+                    'parts_total' => $row->mushaf_parts_total !== null ? (int) $row->mushaf_parts_total : null,
+                    'ayah_order' => $row->mushaf_ayah_order !== null ? (int) $row->mushaf_ayah_order : null,
+                    'mushaf_page' => $row->mushaf_page !== null ? (int) $row->mushaf_page : null,
+                    'mushaf_juz_id' => $row->mushaf_juz_id !== null ? (int) $row->mushaf_juz_id : null,
+                    'mushaf_hizb_id' => $row->mushaf_hizb_id !== null ? (int) $row->mushaf_hizb_id : null,
+                    'mushaf_sajda' => $row->mushaf_sajda !== null ? (bool) $row->mushaf_sajda : null,
                 ];
             }
         }
@@ -842,7 +1018,7 @@ class QuranController extends Controller
 
             // Prefer qiraat mushaf fields for non-base readings; keep base id for tags/bookmarks/translations.
             $mushafTextParts = array_values(array_unique(array_filter(array_map(
-                fn(array $part) => $part['text'] ?? null,
+                fn (array $part) => $part['text'] ?? null,
                 $parts
             ))));
             if (count($mushafTextParts) > 0) {
@@ -850,7 +1026,7 @@ class QuranController extends Controller
             }
 
             $mushafPureTextParts = array_values(array_unique(array_filter(array_map(
-                fn(array $part) => $part['pure_text'] ?? null,
+                fn (array $part) => $part['pure_text'] ?? null,
                 $parts
             ))));
             if (count($mushafPureTextParts) > 0) {
@@ -912,14 +1088,14 @@ class QuranController extends Controller
 
     private function getTagsForAyahId(?int $ayahId, ?User $user = null): EloquentCollection
     {
-        if (!$ayahId) {
-            return new EloquentCollection();
+        if (! $ayahId) {
+            return new EloquentCollection;
         }
 
         $ayah = Ayah::query()->find($ayahId);
 
-        if (!$ayah) {
-            return new EloquentCollection();
+        if (! $ayah) {
+            return new EloquentCollection;
         }
 
         return $this->getTagsForAyah($ayah, $user);
@@ -940,10 +1116,10 @@ class QuranController extends Controller
 
         if ($mode === 'page') {
             foreach ($ayahs as $ayah) {
-                if ((int)$ayah->number_in_surah === 1 && (int)$ayah->surah_id !== 1 && (int)$ayah->surah_id !== 9) {
+                if ((int) $ayah->number_in_surah === 1 && (int) $ayah->surah_id !== 1 && (int) $ayah->surah_id !== 9) {
                     if ($bismillahRow) {
                         $b = clone $bismillahRow;
-                        $b->surah_id = (int)$ayah->surah_id;
+                        $b->surah_id = (int) $ayah->surah_id;
                         $b->number_in_surah = 0;
                         $this->applySurahNames($b);
                         $b->tags = $this->getTagsForAyah($b, $user);
@@ -959,11 +1135,11 @@ class QuranController extends Controller
         }
 
         // juz mode
-        $currentSurah = (int)$ayahs->first()->surah_id;
+        $currentSurah = (int) $ayahs->first()->surah_id;
 
         foreach ($ayahs as $ayah) {
-            if ((int)$ayah->surah_id !== $currentSurah) {
-                $currentSurah = (int)$ayah->surah_id;
+            if ((int) $ayah->surah_id !== $currentSurah) {
+                $currentSurah = (int) $ayah->surah_id;
 
                 if ($currentSurah !== 9 && $bismillahRow) {
                     $b = clone $bismillahRow;

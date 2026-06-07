@@ -116,7 +116,26 @@ Laravel auto-discovers all commands recursively — no registration needed.
 
 ### Helpers
 
-Global helpers live in `app/Helpers.php` (autoloaded). Pipeline utility functions (`runCmd`, `runCmdAndGc`, `resolveQiraatPipelineTarget`) are defined directly in `routes/console.php`.
+Global helpers live in `app/Helpers.php` (autoloaded). Pipeline utility functions (`runCmd`, `runCmdAndGc`, `resolveQiraatPipelineTarget`) are defined directly in `routes/console.php`. `normalizeArabicForSearch()` strips diacritics/tashkeel from a query so it can be matched against `ayahs.pure_text` (mirrors `BaseAyahArtifactsGenerator::removeArabicDiacriticsFast`).
+
+---
+
+## Search (Exact + Semantic)
+
+Endpoint: `GET /search?q=...&type=exact|semantic` → `QuranController::search()`. Both modes produce a relevance-ordered ayah-id list (capped at `SEARCH_CANDIDATE_CAP`), then hydrate it through the shared `filterAyahs()` pipeline (editions / qiraat / tags), re-sorting the page to preserve ranking.
+
+- **Exact search** runs **entirely in Postgres** — no AI service. The query is diacritic-normalized and matched (ILIKE substring) against `pure_text` (raw `text` as fallback), ranked by `pg_trgm` `similarity()`. Requires the `pg_trgm` extension + GIN trigram indexes (migration `enable_pg_trgm_for_exact_search`).
+- **Semantic search** ranks against per-ayah embedding vectors using **pgvector**'s cosine-distance operator (`embedding <=> :vec`). The only AI involvement is embedding the *user's query*: the backend calls the Python service `POST /embed`, gets a 768-dim vector, and runs the pgvector query itself. Requires the `vector` extension + `ayahs.embedding vector(768)` column + HNSW index (migration `add_embedding_to_ayahs_for_semantic_search`).
+
+### Relationship with the `quran-semantic-search` (AI) service
+
+A separate FastAPI/Python project at `/home/nightcore/Projects/quran-semantic-search` owns the embedding **model** (default `Omartificial-Intelligence-Space/GATE-AraBert-v1`, an Arabic-tuned sentence model, 768 dims; overridable via `EMBEDDING_MODEL`/`EMBEDDING_DIM` env). It is a stateless **embedder**, not the search engine:
+
+- `POST /embed { "text": "..." }` → `{ "vector": [...], "dim": 768, "model": "..." }` — called by the backend at query time. (`{ "texts": [...] }` batch form is used for indexing.)
+- `backfill_embeddings.py` (in that project) reads ayahs from **this same Postgres DB** and writes the `ayahs.embedding` column. It embeds each ayah's **meaning** — the **tafsir** (`ayah_edition` edition 1 = تفسير الميسر) **+ curated tag names** (`ayah_tags` → `tags.name`) — *not* the raw Arabic text (a sentence model ranks bare classical strings like the muqatta'at "الم" by length, not meaning). Word/letter matching is exact search's job (pg_trgm); semantic is purely meaning. Run it once after the pgvector migration, and again whenever tafsir/tags change or the model changes.
+- Legacy `POST /search` (in-memory pickle similarity) still exists but is **not** used by the backend search flow.
+
+Source of truth is this backend's Postgres. The AI service holds no ayah data — it only converts text → vectors. Config: `config/services.php` `ai.url` (env `AI_URL`). If the model/dimension changes, update **both** the `vector(N)` migration here and `EMBEDDING_DIM`/`MODEL_NAME` in the AI service.
 
 ---
 
