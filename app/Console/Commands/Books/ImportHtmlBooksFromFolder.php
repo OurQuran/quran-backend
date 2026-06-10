@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands\Books;
 
+use App\Support\QiraatImportMaps;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -86,6 +87,8 @@ class ImportHtmlBooksFromFolder extends Command
             $this->warn("No <title> found in: {$filePath} — skipping.");
             return -1;
         }
+
+        $bookName = $this->canonicalBookName($bookName, basename($filePath));
 
         $this->line("==> [{$bookName}]  {$filePath}");
 
@@ -460,5 +463,27 @@ class ImportHtmlBooksFromFolder extends Command
         $s = preg_replace('/[ \t]+/u', ' ', $s);
         $s = preg_replace('/\n{3,}/u', "\n\n", $s);
         return trim($s);
+    }
+
+    private function canonicalBookName(string $title, string $filename): string
+    {
+        $haystack = $this->normalizeBookKey($filename . ' ' . $title);
+
+        foreach (QiraatImportMaps::booksByFilenameKeyword() as $keyword => $bookName) {
+            if (str_contains($haystack, $this->normalizeBookKey($keyword))) {
+                return $bookName;
+            }
+        }
+
+        return trim($title);
+    }
+
+    private function normalizeBookKey(string $value): string
+    {
+        $value = \normalizeArabicForSearch($value);
+        $value = str_replace(['ى', 'ي', 'ك', 'ک'], ['ی', 'ی', 'ک', 'ک'], $value);
+        $value = preg_replace('/\s+/u', ' ', $value);
+
+        return trim((string) $value);
     }
 }

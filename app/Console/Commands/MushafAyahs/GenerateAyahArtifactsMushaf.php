@@ -10,6 +10,7 @@ class GenerateAyahArtifactsMushaf extends Command
     protected $signature = 'generate:ayah-artifacts-mushaf
         {--qiraat= : Only process one qiraat_reading_id}
         {--mode=both : pure, html, or both}
+        {--diff-class=qiraat-diff : CSS class added to words that are part of qiraat differences}
         {--chunk=2000 : Ayah chunk size}
         {--batch=800 : Update batch size}
         {--dry-run : Do not write, only simulate}';
@@ -21,6 +22,7 @@ class GenerateAyahArtifactsMushaf extends Command
         return $generator->generate($this, [
             'qiraat' => $this->option('qiraat'),
             'mode' => $this->option('mode'),
+            'diff_class' => $this->option('diff-class'),
             'chunk' => $this->option('chunk'),
             'batch' => $this->option('batch'),
             'dry_run' => (bool) $this->option('dry-run'),
