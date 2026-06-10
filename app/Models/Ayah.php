@@ -22,63 +22,66 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $juz_id
  * @property bool $sajda
  * @property string|null $ayah_template
- *
  * @property Surah $surah
  * @property Collection|Tag[] $tags
  * @property Collection|Word[] $words
  * @property Collection|Edition[] $editions
- *
- * @package App\Models
  */
 class Ayah extends Model
 {
-	protected $table = 'ayahs';
+    protected $table = 'ayahs';
 
-	public $timestamps = false; // Disable automatic timestamps
+    public $timestamps = false; // Disable automatic timestamps
 
-	protected $casts = [
-		'id' => 'int',
-		'number' => 'int',
-		'number_in_surah' => 'int',
-		'page' => 'int',
-		'surah_id' => 'int',
-		'hizb_id' => 'int',
-		'juz_id' => 'int',
-		'sajda' => 'bool'
-	];
+    protected $casts = [
+        'id' => 'int',
+        'number' => 'int',
+        'number_in_surah' => 'int',
+        'page' => 'int',
+        'surah_id' => 'int',
+        'hizb_id' => 'int',
+        'juz_id' => 'int',
+        'sajda' => 'bool',
+    ];
 
-	protected $fillable = [
-		'ayah_template',
-		'pure_text'
-	];
+    protected $fillable = [
+        'ayah_template',
+        'pure_text',
+    ];
 
-	public function surah()
-	{
-		return $this->belongsTo(Surah::class);
-	}
+    // The semantic-search vector is large (786 floats) and never belongs in
+    // an API response. Hidden so `select('ayahs.*')` queries don't leak it.
+    protected $hidden = [
+        'embedding',
+    ];
 
-	public function tags()
-	{
-		return $this->belongsToMany(Tag::class, 'ayah_tags')
-			->withPivot('id', 'notes', 'created_by', 'updated_by', 'approved_by', 'approved_at')
-			->withTimestamps()
-			->without('pivot');
-	}
+    public function surah()
+    {
+        return $this->belongsTo(Surah::class);
+    }
 
-	public function words()
-	{
-		return $this->hasMany(Word::class);
-	}
+    public function tags()
+    {
+        return $this->belongsToMany(Tag::class, 'ayah_tags')
+            ->withPivot('id', 'notes', 'created_by', 'updated_by', 'approved_by', 'approved_at')
+            ->withTimestamps()
+            ->without('pivot');
+    }
 
-	public function editions()
-	{
-		return $this->belongsToMany(Edition::class)
-			->withPivot('id', 'data', 'is_audio')
-			->withTimestamps();
-	}
+    public function words()
+    {
+        return $this->hasMany(Word::class);
+    }
 
-	public function bookmarks()
-	{
-		return $this->hasMany(Bookmark::class, 'ayah_id', 'id');
-	}
+    public function editions()
+    {
+        return $this->belongsToMany(Edition::class)
+            ->withPivot('id', 'data', 'is_audio')
+            ->withTimestamps();
+    }
+
+    public function bookmarks()
+    {
+        return $this->hasMany(Bookmark::class, 'ayah_id', 'id');
+    }
 }

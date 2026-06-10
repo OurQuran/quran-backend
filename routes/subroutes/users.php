@@ -7,7 +7,7 @@ Route::prefix('users')->group(function () {
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::post("/change_password", [UserController::class, 'changeOwnPassword']);
 
-        Route::middleware(['role:superadmin'])->group(function () {
+        Route::middleware(['permission:users.manage,api'])->group(function () {
             Route::get('/', [UserController::class, 'index']);
             Route::post('/', [UserController::class, 'store']);
             Route::post("/{user}/change_password", [UserController::class, 'changeUserPassword']);

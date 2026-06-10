@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Spatie\Permission\Traits\HasRoles;
 /**
  * Class User
  *
@@ -22,8 +23,6 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  * @property string|null $remember_token
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property string $role
- *
  * @property Collection|Tag[] $tags
  * @property Collection|AyahTag[] $ayah_tags
  * @property Collection|Dictionary[] $dictionaries
@@ -33,17 +32,24 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  */
 class User extends Authenticatable
 {
-    use HasApiTokens, SoftDeletes;
+    use HasApiTokens, HasRoles, SoftDeletes;
 
     protected $table = 'users';
+    protected string $guard_name = 'api';
 
     protected $fillable = [
         'name',
         'username',
         'password',
-        'role',
-        'remember_token'
+        'remember_token',
     ];
+
+    protected $appends = ['role'];
+
+    public function getRoleAttribute(): string
+    {
+        return $this->getRoleNames()->first() ?? 'user';
+    }
 
     protected $hidden = [
         'password',
@@ -67,9 +73,14 @@ class User extends Authenticatable
 		return $this->hasMany(Dictionary::class, 'updated_by');
 	}
 
-    public function hasRoles(...$roles): bool
+    public function hasRoles(string ...$roles): bool
     {
-        return in_array($this->role, $roles);
+        return $this->hasAnyRole($roles);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->hasAnyRole(['admin', 'superadmin']);
     }
 
 }

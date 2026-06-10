@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Ayah;
 use App\Models\Bookmark;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 
@@ -113,7 +114,7 @@ class BookmarksController extends Controller
         );
 
         // If user is admin or superadmin, they can see all tags
-        if ($user && in_array($user->role, ['admin', 'superadmin'])) {
+        if ($user && $user->isAdmin()) {
             // No additional filters - admins see everything
         }
         // Regular users see:
@@ -125,9 +126,12 @@ class BookmarksController extends Controller
                 // Admin/superadmin created tags (all of them)
                 $query->whereExists(function($subquery) {
                     $subquery->select(\DB::raw(1))
-                        ->from('users')
-                        ->whereColumn('users.id', '=', 'ayah_tags.created_by')
-                        ->whereIn('users.role', ['admin', 'superadmin']);
+                        ->from('model_has_roles')
+                        ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                        ->whereColumn('model_has_roles.model_id', '=', 'ayah_tags.created_by')
+                        ->where('model_has_roles.model_type', User::class)
+                        ->where('roles.guard_name', 'api')
+                        ->whereIn('roles.name', ['admin', 'superadmin']);
                 });
 
                 // If user is logged in, also include their own tags

@@ -16,6 +16,7 @@ class MushafAyahArtifactsGenerator
             ? (int) $options['qiraat']
             : null;
         $mode = (string) ($options['mode'] ?? 'both');
+        $diffClass = trim((string) ($options['diff_class'] ?? 'qiraat-diff')) ?: 'qiraat-diff';
 
         $generatePure = in_array($mode, ['both', 'pure'], true);
         $generateHtml = in_array($mode, ['both', 'html'], true);
@@ -50,26 +51,54 @@ class MushafAyahArtifactsGenerator
             $dry,
             $generatePure,
             $generateHtml,
+            $diffClass,
             $command
         ) {
             $ayahIds = $ayahs->pluck('id')->map(fn ($v) => (int) $v)->all();
             $wordTemplatesByAyah = [];
 
             if ($generateHtml && !empty($ayahIds)) {
+                $diffWordIdsByAyah = DB::table('mushaf_word_to_word_map as m')
+                    ->join('mushaf_words as w', 'w.id', '=', 'm.mushaf_word_id')
+                    ->whereIn('w.mushaf_ayah_id', $ayahIds)
+                    ->whereNotNull('m.qiraat_difference_id')
+                    ->select('w.mushaf_ayah_id', 'm.mushaf_word_id')
+                    ->get()
+                    ->groupBy('mushaf_ayah_id')
+                    ->map(function ($rows) {
+                        return $rows
+                            ->pluck('mushaf_word_id')
+                            ->map(fn ($id) => (int) $id)
+                            ->unique()
+                            ->flip()
+                            ->all();
+                    })
+                    ->all();
+
                 $wordTemplates = DB::table('mushaf_words as w')
-                    ->select('w.mushaf_ayah_id', 'w.position', 'w.word', 'w.word_template')
+                    ->select('w.id', 'w.mushaf_ayah_id', 'w.position', 'w.word', 'w.word_template', 'w.pure_word')
                     ->whereIn('w.mushaf_ayah_id', $ayahIds)
                     ->orderBy('w.mushaf_ayah_id')
                     ->orderBy('w.position')
                     ->get();
 
+                $diffWordIdsByAyah = $this->mergeDiffWordIdsByAyah(
+                    $diffWordIdsByAyah,
+                    $this->diffWordIdsByQiraatDifferenceText($ayahIds, $wordTemplates)
+                );
+
                 foreach ($wordTemplates as $w) {
                     $ayahId = (int) $w->mushaf_ayah_id;
+                    $wordId = (int) $w->id;
                     $tpl = (string) ($w->word_template ?? '');
 
                     if ($tpl === '') {
                         $safe = htmlspecialchars(trim((string) ($w->word ?? '')), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                        $tpl = '<span>' . $safe . '</span>';
+                        $tpl = '<span id="' . $wordId . '">' . $safe . '</span>';
+                    }
+
+                    if (isset($diffWordIdsByAyah[$ayahId][$wordId])) {
+                        $tpl = $this->addClassToFirstSpan($tpl, $diffClass);
                     }
 
                     $wordTemplatesByAyah[$ayahId][] = $tpl;
@@ -215,6 +244,161 @@ class MushafAyahArtifactsGenerator
         ";
 
         DB::update($sql, $bindings);
+    }
+
+    private function mergeDiffWordIdsByAyah(array $existing, array $fallback): array
+    {
+        foreach ($fallback as $ayahId => $wordIds) {
+            foreach ($wordIds as $wordId => $value) {
+                $existing[(int) $ayahId][(int) $wordId] = $value;
+            }
+        }
+
+        return $existing;
+    }
+
+    private function diffWordIdsByQiraatDifferenceText(array $mushafAyahIds, $wordRows): array
+    {
+        if (empty($mushafAyahIds) || $wordRows->isEmpty()) {
+            return [];
+        }
+
+        $wordsByAyah = $wordRows
+            ->groupBy('mushaf_ayah_id')
+            ->map(function ($rows) {
+                return $rows->map(function ($word) {
+                    return [
+                        'id' => (int) $word->id,
+                        'norm' => $this->normalizeDiffText((string) ($word->pure_word ?: $word->word ?: '')),
+                    ];
+                })->values()->all();
+            })
+            ->all();
+
+        $diffRows = DB::table('mushaf_ayah_to_ayah_map as map')
+            ->join('mushaf_ayahs as ma', 'ma.id', '=', 'map.mushaf_ayah_id')
+            ->join('ayahs as a', 'a.id', '=', 'map.ayah_id')
+            ->join('qiraat_differences as d', function ($join) {
+                $join->on('d.qiraat_reading_id', '=', 'ma.qiraat_reading_id')
+                    ->on('d.surah', '=', 'a.surah_id')
+                    ->on('d.ayah', '=', 'a.number_in_surah');
+            })
+            ->whereIn('map.mushaf_ayah_id', $mushafAyahIds)
+            ->select('map.mushaf_ayah_id', 'd.hafs_text', 'd.qiraat_text', 'd.qiraat_options')
+            ->get();
+
+        $diffWordIdsByAyah = [];
+
+        foreach ($diffRows as $diff) {
+            $ayahId = (int) $diff->mushaf_ayah_id;
+            $words = $wordsByAyah[$ayahId] ?? [];
+            if (empty($words)) {
+                continue;
+            }
+
+            $needles = [
+                (string) ($diff->qiraat_text ?? ''),
+                (string) ($diff->qiraat_options ?? ''),
+                (string) ($diff->hafs_text ?? ''),
+            ];
+
+            foreach ($needles as $needleText) {
+                $needle = $this->normalizeDiffText($needleText);
+                if ($needle === '') {
+                    continue;
+                }
+
+                $span = $this->findSpanInNormalizedWords($words, $needle);
+                if ($span === null) {
+                    continue;
+                }
+
+                [$start, $end] = $span;
+                for ($i = $start; $i <= $end; $i++) {
+                    if (isset($words[$i]['id'])) {
+                        $diffWordIdsByAyah[$ayahId][(int) $words[$i]['id']] = true;
+                    }
+                }
+
+                break;
+            }
+        }
+
+        return $diffWordIdsByAyah;
+    }
+
+    private function findSpanInNormalizedWords(array $words, string $needle): ?array
+    {
+        $count = count($words);
+        if ($count === 0 || $needle === '') {
+            return null;
+        }
+
+        for ($start = 0; $start < $count; $start++) {
+            $noSpace = '';
+            for ($end = $start; $end < $count; $end++) {
+                $noSpace .= $words[$end]['norm'] ?? '';
+                if ($noSpace === $needle) {
+                    return [$start, $end];
+                }
+                if (mb_strlen($noSpace) > mb_strlen($needle)) {
+                    break;
+                }
+            }
+
+            $withSpace = '';
+            for ($end = $start; $end < $count; $end++) {
+                $withSpace .= ($withSpace === '' ? '' : ' ') . ($words[$end]['norm'] ?? '');
+                if ($withSpace === $needle) {
+                    return [$start, $end];
+                }
+                if (mb_strlen($withSpace) > mb_strlen($needle)) {
+                    break;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeDiffText(string $text): string
+    {
+        return \normalizeArabicForSearch($text);
+    }
+
+    private function addClassToFirstSpan(string $html, string $className): string
+    {
+        $className = trim($className);
+        if ($className === '') {
+            return $html;
+        }
+
+        if (!preg_match('/<span\b([^>]*)>/iu', $html, $match, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+
+        $tag = $match[0][0];
+        $offset = $match[0][1];
+        $attrs = $match[1][0] ?? '';
+        $safeClass = htmlspecialchars($className, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        if (preg_match('/\sclass=(["\'])(.*?)\1/iu', $attrs, $classMatch)) {
+            $existing = preg_split('/\s+/', trim(html_entity_decode($classMatch[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'))) ?: [];
+            if (in_array($className, $existing, true)) {
+                return $html;
+            }
+
+            $newClassAttr = 'class=' . $classMatch[1] . trim($classMatch[2] . ' ' . $safeClass) . $classMatch[1];
+            $newTag = preg_replace('/\sclass=(["\'])(.*?)\1/iu', ' ' . $newClassAttr, $tag, 1);
+        } else {
+            $newTag = rtrim(substr($tag, 0, -1)) . ' class="' . $safeClass . '">';
+        }
+
+        if (!is_string($newTag) || $newTag === '') {
+            return $html;
+        }
+
+        return substr_replace($html, $newTag, $offset, strlen($tag));
     }
 
     private function removeArabicDiacriticsFast(string $text): string

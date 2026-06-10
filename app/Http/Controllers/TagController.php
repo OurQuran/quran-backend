@@ -7,7 +7,6 @@ use App\Models\AyahTag;
 use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 
 class TagController extends Controller
 {
@@ -39,7 +38,7 @@ class TagController extends Controller
         $user = $this->checkLoginToken();
 
         if (!empty($validated['user_id'])) {
-            if ($validated['user_id'] == $user->id || $user->role == 'superadmin' || $user->role == 'admin')
+            if ($user && ($validated['user_id'] == $user->id || $user->isAdmin()))
                 $query->whereRaw('created_by = ?', ["{$validated['user_id']}"]);
             else
                 return $this->apiError('You do not have the permission to view this', 403);
@@ -73,15 +72,11 @@ class TagController extends Controller
         ]);
 
         $tag = Tag::create([
-            'name' => $validated['name'],
+            'name'       => $validated['name'],
+            'parent_id'  => ($validated['parent_id'] ?? null) ?: null,
             'created_by' => Auth::id(),
             'updated_by' => Auth::id(),
         ]);
-
-        if (isset($validated['parent_id']) && $validated['parent_id'] !== 0) {
-            $tag->parent_id = $validated['parent_id'];
-            $tag->save();
-        }
 
         return $this->apiSuccess($tag, 'Tag created successfully', 201);
     }
@@ -125,6 +120,12 @@ class TagController extends Controller
 
     public function update(Request $request, Tag $tag)
     {
+        $user = $this->checkLoginToken();
+
+        if (!$user->isAdmin() && $tag->created_by !== $user->id) {
+            return $this->apiError('You do not have permission to update this tag', 403);
+        }
+
         $validated = $request->validate([
             'parent_id' => 'sometimes|nullable|int|exists:tags,id',
             'name' => 'sometimes|nullable|string|unique:tags,name',
@@ -137,6 +138,12 @@ class TagController extends Controller
 
     public function destroy(Tag $tag)
     {
+        $user = $this->checkLoginToken();
+
+        if (!$user->isAdmin() && $tag->created_by !== $user->id) {
+            return $this->apiError('You do not have permission to delete this tag', 403);
+        }
+
         $tag->delete();
         return $this->apiSuccess(null, 'Tag deleted successfully');
     }
@@ -222,8 +229,8 @@ class TagController extends Controller
         $unapprovedTagsQuery = AyahTag::query()
             ->with([
                 'ayah',
-                'tag.creator:id,name,username,role',
-                'tag.updater:id,name,username,role',
+                'tag.creator:id,name,username',
+                'tag.updater:id,name,username',
             ])
             ->where(function($query) {
                 $query->whereNull('approved_by')
@@ -492,16 +499,13 @@ class TagController extends Controller
         }
 
         // Fetch ayah
-        $ayah = Ayah::query();
+        $ayahQuery = Ayah::where('id', '=', $validated['ayah_id'], 'and');
 
-        if (Auth::user()->role == 'admin' || Auth::user()->role == 'superadmin') {
-            $ayah->where('id', $validated['ayah_id'])
-                ->first();
-        } else {
-            $ayah->where('id', $validated['ayah_id'])
-                ->where('createdBy', Auth::id())
-                ->first();
+        if (!Auth::user()->isAdmin()) {
+            $ayahQuery->where('created_by', '=', Auth::id(), 'and');
         }
+
+        $ayah = $ayahQuery->first();
 
         if (!$ayah) {
             return $this->apiError("Ayah with ID {$validated['ayah_id']} not found.", 404);
@@ -614,14 +618,14 @@ class TagController extends Controller
         $query = Tag::query()
             ->select('id', 'name', 'parent_id', 'created_by', 'updated_by')
             ->with([
-                'creator:id,name,username,role',
-                'updater:id,name,username,role',
+                'creator:id,name,username',
+                'updater:id,name,username',
                 'parent' => function($q) {
                     $q->select('id', 'name', 'parent_id', 'created_by', 'updated_by')
                         ->withCount('allChildren as children_count');
                 },
-                'parent.creator:id,name,username,role',
-                'parent.updater:id,name,username,role'
+                'parent.creator:id,name,username',
+                'parent.updater:id,name,username'
             ])
             ->withCount('allChildren as children_count');
 
@@ -661,7 +665,7 @@ class TagController extends Controller
     /**
      * Recursively set ayahs as an empty array for all children if not already set.
      */
-    private function addEmptyAyahsToChildren($children)
+    private function addEmptyAyahsToChildren(\Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Collection $children): void
     {
         foreach ($children as $child) {
             if (!$child->relationLoaded('ayahs') || $child->ayahs->isEmpty()) {
