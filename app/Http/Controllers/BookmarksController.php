@@ -39,6 +39,7 @@ class BookmarksController extends Controller
                     'ayahs.hizb_id',
                     'ayahs.sajda',
                     'ayahs.ayah_template',
+                    'ayahs.qcf_tajweed_template',
                     'ayahs.pure_text',
                     'bookmarks.created_at'
                 )
@@ -73,6 +74,7 @@ class BookmarksController extends Controller
                     'hizb_id' => $item->hizb_id,
                     'sajda' => $item->sajda,
                     'ayah_template' => $item->ayah_template,
+                    'qcf_tajweed_template' => $item->qcf_tajweed_template,
                     'pure_text' => $item->pure_text,
                     'bookmarked' => true,
                     'created_at' => $item->created_at,
