@@ -19,6 +19,9 @@ use Illuminate\Support\Facades\Http;
 
 class QuranController extends Controller
 {
+    private const DEFAULT_TEXT_EDITION_ID = 34;
+    private const DEFAULT_AUDIO_EDITION_ID = 110;
+
     // todo: Edition Languages (todo, group by the language identifier for easier frontend fetch)
     public function languages()
     {
@@ -228,6 +231,11 @@ class QuranController extends Controller
                         DB::raw('(SELECT s.name_en FROM surahs s WHERE s.id = ma.surah_id LIMIT 1) AS surah_name_en'),
 
                         DB::raw('COALESCE(text_ae.data, NULL) AS translation'),
+                        $this->qiraatDifferenceTextSelect(
+                            'ma.qiraat_reading_id',
+                            'COALESCE((SELECT a.surah_id FROM ayahs a WHERE a.id = map.ayah_id LIMIT 1), ma.surah_id)',
+                            'COALESCE((SELECT a.number_in_surah FROM ayahs a WHERE a.id = map.ayah_id LIMIT 1), ma.number_in_surah)'
+                        ),
                         DB::raw('COALESCE(audio_ae.data, NULL) AS audio'),
 
                         $user
@@ -473,6 +481,11 @@ class QuranController extends Controller
                         DB::raw('(SELECT s.name_en FROM surahs s WHERE s.id = ma.surah_id LIMIT 1) AS surah_name_en'),
 
                         DB::raw('text_ae.data AS translation'),
+                        $this->qiraatDifferenceTextSelect(
+                            'ma.qiraat_reading_id',
+                            'COALESCE((SELECT a.surah_id FROM ayahs a WHERE a.id = map.ayah_id LIMIT 1), ma.surah_id)',
+                            'COALESCE((SELECT a.number_in_surah FROM ayahs a WHERE a.id = map.ayah_id LIMIT 1), ma.number_in_surah)'
+                        ),
                         DB::raw('audio_ae.data AS audio'),
 
                         $user
@@ -848,8 +861,8 @@ class QuranController extends Controller
     {
         $validated['page'] = (int) ($validated['page'] ?? 1);
         $validated['per_page'] = (int) ($validated['per_page'] ?? 20);
-        $validated['text_edition'] = (int) ($validated['text_edition'] ?? 1);
-        $validated['audio_edition'] = (int) ($validated['audio_edition'] ?? 110);
+        $validated['text_edition'] = (int) ($validated['text_edition'] ?? self::DEFAULT_TEXT_EDITION_ID);
+        $validated['audio_edition'] = (int) ($validated['audio_edition'] ?? self::DEFAULT_AUDIO_EDITION_ID);
         $validated['qiraat_reading_id'] = (int) ($validated['qiraat_reading_id'] ?? QiraatImportMaps::baseReadingId());
         $validated['verse'] = (int) ($validated['verse'] ?? 0);
 
@@ -924,6 +937,7 @@ class QuranController extends Controller
             DB::raw('(SELECT s.name_ar FROM surahs s WHERE s.id = ayahs.surah_id LIMIT 1) AS surah_name_ar'),
             DB::raw('(SELECT s.name_en FROM surahs s WHERE s.id = ayahs.surah_id LIMIT 1) AS surah_name_en'),
             DB::raw("COALESCE(text_ae.data, (SELECT ae1.data FROM ayah_edition ae1 WHERE ae1.ayah_id = 1 AND ae1.edition_id = $textEdition LIMIT 1)) AS translation"),
+            $this->qiraatDifferenceTextSelect('ma.qiraat_reading_id', 'ayahs.surah_id', 'ayahs.number_in_surah'),
             DB::raw("COALESCE(audio_ae.data, (SELECT ae2.data FROM ayah_edition ae2 WHERE ae2.ayah_id = 1 AND ae2.edition_id = $audioEdition LIMIT 1)) AS audio"),
         ]);
 
@@ -939,6 +953,29 @@ class QuranController extends Controller
     private function usesBaseAyahs(int $qiraatReadingId): bool
     {
         return QiraatImportMaps::usesBaseAyahs($qiraatReadingId);
+    }
+
+    private function qiraatDifferenceTextSelect(string $qiraatExpr, string $surahExpr, string $ayahExpr): \Illuminate\Database\Query\Expression
+    {
+        return DB::raw("
+            (
+                SELECT string_agg(
+                    NULLIF(
+                        concat_ws(' - ',
+                            NULLIF(d.qiraat_text, ''),
+                            NULLIF(d.explanation, '')
+                        ),
+                        ''
+                    ),
+                    E'\n'
+                    ORDER BY d.id
+                )
+                FROM qiraat_differences d
+                WHERE d.qiraat_reading_id = {$qiraatExpr}
+                  AND d.surah = {$surahExpr}
+                  AND d.ayah = {$ayahExpr}
+            ) AS qiraat_difference_text
+        ");
     }
 
     private function applyMushafJoin(Builder $ayahsQuery, int $qiraatReadingId): void

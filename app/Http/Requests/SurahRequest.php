@@ -7,6 +7,9 @@ use Illuminate\Validation\Rule;
 
 class SurahRequest extends FormRequest
 {
+    private const DEFAULT_TEXT_EDITION_ID = 34;
+    private const DEFAULT_AUDIO_EDITION_ID = 110;
+
     public function authorize(): bool
     {
         return true;
@@ -32,8 +35,8 @@ class SurahRequest extends FormRequest
     public function validatedWithDefaults(): array
     {
         $validated = $this->validated();
-        $validated['text_edition'] = $validated['text_edition'] ?? 1;
-        $validated['audio_edition'] = $validated['audio_edition'] ?? 106;
+        $validated['text_edition'] = $validated['text_edition'] ?? self::DEFAULT_TEXT_EDITION_ID;
+        $validated['audio_edition'] = $validated['audio_edition'] ?? self::DEFAULT_AUDIO_EDITION_ID;
         $validated['page'] = $validated['page'] ?? 1;
         $validated['per_page'] = $validated['per_page'] ?? 20;
 
