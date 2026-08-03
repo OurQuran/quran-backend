@@ -23,14 +23,28 @@ class BookController extends Controller
 
         $query = DB::table('books')
             ->leftJoin('book_sections', 'books.id', '=', 'book_sections.book_id')
-            ->select('books.id', 'books.name', DB::raw('COUNT(book_sections.id) AS section_count'))
-            ->groupBy('books.id', 'books.name')
+            ->select(
+                'books.id',
+                'books.name',
+                'books.pdf_path',
+                DB::raw('COUNT(book_sections.id) AS section_count')
+            )
+            ->groupBy('books.id', 'books.name', 'books.pdf_path')
             ->orderBy('books.id');
 
         $totalCount = DB::table('books')->count();
         $totalPages = (int) ceil($totalCount / $perPage);
 
-        $books = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
+        $books = $query->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
+        $peopleByBookId = $this->peopleByBookIds($books->pluck('id')->map(fn ($id) => (int) $id)->all());
+        $books = $books->map(fn ($book) => $this->formatBook(
+            $book,
+            (int) $book->section_count,
+            $peopleByBookId[(int) $book->id] ?? null,
+            false
+        ));
 
         return $this->apiSuccess([
             'meta' => [
@@ -58,10 +72,30 @@ class BookController extends Controller
         $sectionCount = DB::table('book_sections')->where('book_id', $id)->count();
 
         return $this->apiSuccess([
-            'id'            => $book->id,
-            'name'          => $book->name,
-            'section_count' => $sectionCount,
+            ...$this->formatBook($book, $sectionCount, $this->peopleForBook((int) $book->id)),
         ], 'Book retrieved successfully');
+    }
+
+    /**
+     * GET /books/{id}/download
+     * Download the PDF file for a book.
+     */
+    public function download(int $id)
+    {
+        $book = DB::table('books')->where('id', $id)->first();
+
+        if (!$book) {
+            return $this->apiError('Book not found', 404);
+        }
+
+        $path = $this->bookPdfPath($book);
+        if (!$path) {
+            return $this->apiError('Book PDF not found', 404);
+        }
+
+        return response()->download($path, basename($path), [
+            'Content-Type' => 'application/pdf',
+        ]);
     }
 
     /**
@@ -105,7 +139,7 @@ class BookController extends Controller
                 'current_page' => $page,
                 'page_size'    => $perPage,
             ],
-            'book'     => ['id' => $book->id, 'name' => $book->name],
+            'book'     => $this->formatBook($book, null, $this->peopleForBook((int) $book->id)),
             'sections' => $sections,
         ], 'Sections retrieved successfully');
     }
@@ -164,8 +198,103 @@ class BookController extends Controller
         }
 
         return $this->apiSuccess([
-            'book'    => ['id' => $book->id, 'name' => $book->name],
+            'book'    => $this->formatBook($book, null, $this->peopleForBook((int) $book->id)),
             'section' => $data,
         ], 'Section retrieved successfully');
+    }
+
+    private function formatBook(object $book, ?int $sectionCount = null, ?array $people = null, bool $includePeople = true): array
+    {
+        $hasPdf = $this->bookPdfPath($book) !== null;
+        $people ??= [
+            'authors' => [],
+            'supervisors' => [],
+        ];
+        $authors = $people['authors'] ?? [];
+        $supervisors = $people['supervisors'] ?? [];
+
+        $data = [
+            'id' => (int) $book->id,
+            'name' => $book->name,
+            'author_name' => $this->namesAsText($authors),
+            'supervisor_name' => $this->namesAsText($supervisors),
+            'has_pdf' => $hasPdf,
+            'download_url' => $hasPdf ? url("/api/books/{$book->id}/download") : null,
+        ];
+
+        if ($includePeople) {
+            $data['authors'] = $authors;
+            $data['supervisors'] = $supervisors;
+        }
+
+        if ($sectionCount !== null) {
+            $data['section_count'] = $sectionCount;
+        }
+
+        return $data;
+    }
+
+    private function peopleForBook(int $bookId): array
+    {
+        return $this->peopleByBookIds([$bookId])[$bookId] ?? [
+            'authors' => [],
+            'supervisors' => [],
+        ];
+    }
+
+    private function peopleByBookIds(array $bookIds): array
+    {
+        if ($bookIds === []) {
+            return [];
+        }
+
+        $peopleByBookId = [];
+
+        DB::table('book_people')
+            ->whereIn('book_id', $bookIds)
+            ->whereIn('role', ['author', 'supervisor'])
+            ->select('book_id', 'role', 'name', 'order_no')
+            ->orderBy('book_id')
+            ->orderBy('role')
+            ->orderBy('order_no')
+            ->orderBy('id')
+            ->get()
+            ->each(function ($person) use (&$peopleByBookId) {
+                $bookId = (int) $person->book_id;
+                $key = $person->role === 'author' ? 'authors' : 'supervisors';
+
+                $peopleByBookId[$bookId] ??= [
+                    'authors' => [],
+                    'supervisors' => [],
+                ];
+                $peopleByBookId[$bookId][$key][] = [
+                    'name' => $person->name,
+                    'role' => $person->role,
+                    'order_no' => (int) $person->order_no,
+                ];
+            });
+
+        return $peopleByBookId;
+    }
+
+    private function namesAsText(array $people): ?string
+    {
+        $names = array_values(array_filter(array_map(
+            fn (array $person) => $person['name'] ?? null,
+            $people
+        )));
+
+        return $names === [] ? null : implode(', ', $names);
+    }
+
+    private function bookPdfPath(object $book): ?string
+    {
+        if (empty($book->pdf_path) || !str_starts_with($book->pdf_path, 'books/')) {
+            return null;
+        }
+
+        $path = storage_path('app/private/' . $book->pdf_path);
+
+        return is_file($path) ? $path : null;
     }
 }

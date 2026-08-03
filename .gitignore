@@ -21,3 +21,7 @@ yarn-error.log
 /.zed
 /html_files
 /database/data
+/storage/app/*
+!/storage/app/private/
+!/storage/app/private/books/
+!/storage/app/private/books/*.pdf
