@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Support\QiraatImportMaps;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -12,6 +13,37 @@ use Illuminate\Support\Facades\DB;
  */
 class QiraatDifferenceController extends Controller
 {
+    /**
+     * Lightweight difference counts for every Surah in one request.
+     * GET /qiraats/{qiraat_reading_id}/difference-counts
+     */
+    public function counts(string $qiraat_reading_id)
+    {
+        $resolvedId = QiraatImportMaps::resolveReadingId($qiraat_reading_id);
+        if (!$resolvedId) {
+            return response()->json(['message' => 'Qiraat reading not found'], 404);
+        }
+
+        $cacheKey = "qiraat_difference_counts:v1:{$resolvedId}";
+
+        $data = Cache::remember($cacheKey, now()->addDay(), function () use ($resolvedId) {
+            $countsBySurah = DB::table('qiraat_differences')
+                ->select('surah', DB::raw('COUNT(*) as difference_count'))
+                ->where('qiraat_reading_id', $resolvedId)
+                ->groupBy('surah')
+                ->pluck('difference_count', 'surah');
+
+            return collect(range(1, 114))
+                ->map(fn(int $surah) => [
+                    'surah_id' => $surah,
+                    'difference_count' => (int) ($countsBySurah[$surah] ?? 0),
+                ])
+                ->all();
+        });
+
+        return $this->apiSuccess(['data' => $data], 'Qiraat difference counts retrieved successfully');
+    }
+
     /**
      * List qiraat_differences for a qiraat reading (paginated).
      * Optional filters: surah, ayah.

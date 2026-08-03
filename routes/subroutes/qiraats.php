@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 // Qiraat: paginated list of qiraat_differences for a reading (table view)
 Route::prefix('qiraats')->group(function () {
     Route::get('/', [QuranController::class, 'qiraats']);
+    Route::get('/{qiraat_reading_id}/difference-counts', [QiraatDifferenceController::class, 'counts']);
     Route::get('/{qiraat_reading_id}/differences', [QiraatDifferenceController::class, 'index']);
     // Qiraat: precompiled whole-Quran (qiraat_diff_ayahs / qiraat_diff_words)
     Route::get('/{qiraat_reading_id}/precompiled/ayahs', [QiraatPrecompiledController::class, 'ayahs']);
