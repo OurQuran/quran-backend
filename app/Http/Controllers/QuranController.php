@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
@@ -513,6 +514,10 @@ class QuranController extends Controller
                         'total_pages' => $totalPages,
                         'current_page' => $page,
                         'per_page' => $perPage,
+                        'qiraat' => [
+                            'reading_id' => $qiraatReadingId,
+                            'difference_count' => $this->qiraatDifferenceCountForSurah($qiraatReadingId, $surah),
+                        ],
                     ],
                     'ayahs' => $ayahs,
                 ], 'Surah retrieved successfully');
@@ -565,6 +570,10 @@ class QuranController extends Controller
                     'total_pages' => $totalPages,
                     'current_page' => $page,
                     'per_page' => $perPage,
+                    'qiraat' => [
+                        'reading_id' => $qiraatReadingId,
+                        'difference_count' => $this->qiraatDifferenceCountForSurah($qiraatReadingId, $surah),
+                    ],
                 ],
                 'ayahs' => $modifiedAyahs,
             ], 'Surah retrieved successfully');
@@ -953,6 +962,22 @@ class QuranController extends Controller
     private function usesBaseAyahs(int $qiraatReadingId): bool
     {
         return QiraatImportMaps::usesBaseAyahs($qiraatReadingId);
+    }
+
+    private function qiraatDifferenceCountForSurah(int $qiraatReadingId, int $surah): int
+    {
+        if ($this->usesBaseAyahs($qiraatReadingId)) {
+            return 0;
+        }
+
+        return (int) Cache::remember(
+            "qiraat_difference_count:v1:{$qiraatReadingId}:{$surah}",
+            now()->addDay(),
+            fn () => DB::table('qiraat_differences')
+                ->where('qiraat_reading_id', $qiraatReadingId)
+                ->where('surah', $surah)
+                ->count()
+        );
     }
 
     private function qiraatDifferenceTextSelect(string $qiraatExpr, string $surahExpr, string $ayahExpr): \Illuminate\Database\Query\Expression
