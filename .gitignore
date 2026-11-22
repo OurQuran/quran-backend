@@ -24,4 +24,3 @@ yarn-error.log
 /storage/app/*
 !/storage/app/private/
 !/storage/app/private/books/
-!/storage/app/private/books/*.pdf

@@ -16,10 +16,11 @@ class BooksSeeder extends Seeder
         $books = QiraatImportMaps::seededBooks();
 
         foreach ($books as $b) {
+            $existing = DB::table('books')->where('name', $b['name'])->where('language', 'ku')->first(['pdf_path']);
             DB::table('books')->updateOrInsert(
-                ['name' => $b['name']],
+                ['name' => $b['name'], 'language' => 'ku'],
                 [
-                    'pdf_path' => $b['pdf_path'] ?? null,
+                    'pdf_path' => $existing?->pdf_path ?? ($b['pdf_path'] ?? null),
                     'updated_at' => $now,
                     'created_at' => $now,
                 ]
@@ -29,7 +30,7 @@ class BooksSeeder extends Seeder
                 continue;
             }
 
-            $bookId = DB::table('books')->where('name', $b['name'])->value('id');
+            $bookId = DB::table('books')->where('name', $b['name'])->where('language', 'ku')->value('id');
             $people = $this->peopleRowsForBook((int) $bookId, $b, $now);
 
             if ($people !== []) {

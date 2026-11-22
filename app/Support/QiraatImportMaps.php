@@ -380,4 +380,23 @@ class QiraatImportMaps
             'یەعقوبی' => 'القراءات - يعقوب الحضرمي (رويس وروح)',
         ];
     }
+
+    /**
+     * Download PDFs of the Arabic editions (books.language = 'ar'), keyed by canonical book name.
+     * Files live in storage/app/private/books/ (see BookController::bookPdfPath); the book importer
+     * sets books.pdf_path from this map when the file exists.
+     */
+    public static function arabicBookPdfByName(): array
+    {
+        return [
+            'القراءات - ابن عامر الشامي (هشام وابن ذكوان)' => 'كتاب ابن عامر -النسخة العربية.pdf',
+            'القراءات - ابن كثير المكي (البزي وقنبل)' => 'كتاب ابن كثير -النسخة العربية.pdf',
+            'القراءات - أبو عمرو البصري (الدوري والسوسي)' => 'كتاب ابو عمرو البصري -النسخة العربية.pdf',
+            'رواية قالون عن نافع' => 'كتاب قالون -النسخة العربية.pdf',
+            'رواية ورش عن نافع' => 'كتاب ورش -النسخة العربية.pdf',
+            'القراءات - الكسائي الكوفي (أبو الحارث والدوري)' => 'كتاب الكسائي -النسخة العربية.pdf',
+            'القراءات - حمزة الزيات (خلف وخلاد)' => 'كتاب حمزة -النسخة العربية.pdf',
+            'القراءات - يعقوب الحضرمي (رويس وروح)' => 'كتاب يعقوب الحضرمي -النسخة العربية.pdf',
+        ];
+    }
 }

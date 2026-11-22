@@ -16,23 +16,32 @@ class BookController extends Controller
         $validated = $request->validate([
             'page'     => 'sometimes|integer|min:1',
             'per_page' => 'sometimes|integer|min:1|max:100',
+            'language' => 'sometimes|string|in:ku,ar',
         ]);
 
-        $page    = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 20);
+        $page     = (int) ($validated['page'] ?? 1);
+        $perPage  = (int) ($validated['per_page'] ?? 20);
+        $language = $validated['language'] ?? null;
 
         $query = DB::table('books')
             ->leftJoin('book_sections', 'books.id', '=', 'book_sections.book_id')
             ->select(
                 'books.id',
                 'books.name',
+                'books.language',
                 'books.pdf_path',
                 DB::raw('COUNT(book_sections.id) AS section_count')
             )
-            ->groupBy('books.id', 'books.name', 'books.pdf_path')
+            ->groupBy('books.id', 'books.name', 'books.language', 'books.pdf_path')
             ->orderBy('books.id');
 
-        $totalCount = DB::table('books')->count();
+        $countQuery = DB::table('books');
+        if ($language !== null) {
+            $query->where('books.language', $language);
+            $countQuery->where('language', $language);
+        }
+
+        $totalCount = $countQuery->count();
         $totalPages = (int) ceil($totalCount / $perPage);
 
         $books = $query->skip(($page - 1) * $perPage)
@@ -216,6 +225,7 @@ class BookController extends Controller
         $data = [
             'id' => (int) $book->id,
             'name' => $book->name,
+            'language' => $book->language ?? 'ku',
             'author_name' => $this->namesAsText($authors),
             'supervisor_name' => $this->namesAsText($supervisors),
             'has_pdf' => $hasPdf,

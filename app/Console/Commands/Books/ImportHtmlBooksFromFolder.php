@@ -8,9 +8,14 @@ use Illuminate\Support\Facades\DB;
 
 class ImportHtmlBooksFromFolder extends Command
 {
+    /** Separator between the cells of one table row in body_text (U+2502). The frontend splits on it. */
+    public const CELL_SEP = ' │ ';
+
     protected $signature = 'books:import-html-folder
         {--dir= : Directory containing HTML files (default: <project_root>/html_files)}
         {--split-level=1 : Split on heading level h<level> (1=h1, 2=h2, etc.)}
+        {--language=ku : Language of the books in this folder (ku or ar). The same book name can exist once per language}
+        {--pdf-dir= : Directory under private storage containing PDFs named after each HTML file}
         {--force : Delete existing sections for matched books before importing}
         {--dry-run : Don\'t write to database}
     ';
@@ -23,6 +28,13 @@ class ImportHtmlBooksFromFolder extends Command
         $splitLevel = max(1, min(6, (int) $this->option('split-level')));
         $dryRun = (bool) $this->option('dry-run');
         $force = (bool) $this->option('force');
+        $language = strtolower(trim((string) $this->option('language')));
+        $pdfDir = trim((string) $this->option('pdf-dir'), '/');
+
+        if (!in_array($language, ['ku', 'ar'], true)) {
+            $this->error("Invalid --language '{$language}'. Use ku or ar.");
+            return self::FAILURE;
+        }
 
         if (!is_dir($dir)) {
             $this->error("Directory not found: {$dir}");
@@ -37,24 +49,41 @@ class ImportHtmlBooksFromFolder extends Command
             return self::SUCCESS;
         }
 
+        if ($pdfDir !== '') {
+            if (!preg_match('~\Abooks(?:/[A-Za-z0-9_-]+)+\z~D', $pdfDir)) {
+                $this->error('Invalid --pdf-dir. Use a relative directory such as books/layout-v2.');
+                return self::FAILURE;
+            }
+            foreach ($paths as $path) {
+                $pdf = $pdfDir . '/' . pathinfo($path, PATHINFO_FILENAME) . '.pdf';
+                if (!is_file(storage_path('app/private/' . $pdf))) {
+                    $this->error("Missing PDF for " . basename($path) . ": {$pdf}");
+                    return self::FAILURE;
+                }
+            }
+        }
+
         $this->info("Scanning: {$dir}");
         $this->info(
-            'Found: ' . count($paths) . " HTML files; split-level=h{$splitLevel}"
+            'Found: ' . count($paths) . " HTML files; split-level=h{$splitLevel}; language={$language}"
             . ($dryRun ? ' (dry-run)' : '')
             . ($force ? ' (--force)' : '')
         );
 
         $totalSections = 0;
+        $failed = false;
 
         foreach ($paths as $absPath) {
-            $count = $this->processFile($absPath, $dir, $splitLevel, $dryRun, $force);
+            $count = $this->processFile($absPath, $dir, $splitLevel, $dryRun, $force, $language, $pdfDir);
             if ($count >= 0) {
                 $totalSections += $count;
+            } else {
+                $failed = true;
             }
         }
 
         $this->info("Done. Imported {$totalSections} sections.");
-        return self::SUCCESS;
+        return $failed ? self::FAILURE : self::SUCCESS;
     }
 
     // -------------------------------------------------------------------------
@@ -64,7 +93,9 @@ class ImportHtmlBooksFromFolder extends Command
         string $htmlDir,
         int $splitLevel,
         bool $dryRun,
-        bool $force
+        bool $force,
+        string $language,
+        string $pdfDir
     ): int {
         $html = @file_get_contents($filePath);
         if ($html === false) {
@@ -109,17 +140,60 @@ class ImportHtmlBooksFromFolder extends Command
         }
 
         // Find or create book
-        $existing = DB::table('books')->where('name', $bookName)->first(['id']);
+        $existing = DB::table('books')
+            ->where('name', $bookName)
+            ->where('language', $language)
+            ->first(['id', 'pdf_path']);
         if ($existing) {
             $bookId = (int) $existing->id;
-            $this->line("    Found book id={$bookId}");
+            $this->line("    Found book id={$bookId} ({$language})");
         } else {
             $bookId = (int) DB::table('books')->insertGetId([
                 'name' => $bookName,
+                'language' => $language,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
             $this->line("    Created book id={$bookId}");
+        }
+
+        // Arabic editions ship a generated PDF: link it so the download button appears
+        $pdfPath = $pdfDir !== ''
+            ? $pdfDir . '/' . pathinfo($filePath, PATHINFO_FILENAME) . '.pdf'
+            : (($language === 'ar' && empty($existing?->pdf_path) && isset(QiraatImportMaps::arabicBookPdfByName()[$bookName]))
+                ? 'books/' . QiraatImportMaps::arabicBookPdfByName()[$bookName] : null);
+        if ($pdfPath !== null && is_file(storage_path('app/private/' . $pdfPath))) {
+            DB::table('books')->where('id', $bookId)->update(['pdf_path' => $pdfPath]);
+            $this->line("    PDF linked: {$pdfPath}");
+        }
+
+        // The eight Arabic covers credit this preparer. Introduction writers on those
+        // covers are not labelled as checkers, so do not assign them a checker role.
+        if ($language === 'ar' && isset(QiraatImportMaps::arabicBookPdfByName()[$bookName])) {
+            DB::table('book_people')->upsert(
+                [['book_id' => $bookId, 'role' => 'author', 'name' => 'د. أحمد ضيف الله أبو سمهدانة',
+                    'order_no' => 1, 'updated_at' => now(), 'created_at' => now()]],
+                ['book_id', 'role', 'name'],
+                ['order_no', 'updated_at']
+            );
+        }
+
+        if ($language === 'ku') {
+            foreach (QiraatImportMaps::seededBooks() as $metadata) {
+                if ($metadata['name'] !== $bookName) {
+                    continue;
+                }
+                foreach (['authors' => 'author', 'supervisors' => 'supervisor'] as $key => $role) {
+                    foreach ($metadata[$key] ?? [] as $index => $name) {
+                        DB::table('book_people')->upsert(
+                            [['book_id' => $bookId, 'role' => $role, 'name' => $name,
+                                'order_no' => $index + 1, 'created_at' => now(), 'updated_at' => now()]],
+                            ['book_id', 'role', 'name'], ['order_no', 'updated_at']
+                        );
+                    }
+                }
+                break;
+            }
         }
 
         // Optionally wipe existing sections (cascade deletes refs too)
@@ -134,9 +208,24 @@ class ImportHtmlBooksFromFolder extends Command
 
         foreach ($chunks as $chunk) {
             $citeOffsets = [];
-            $bodyText = $this->normalizeWhitespace(
-                $this->extractPlainText($chunk['nodes'], $citeOffsets)
-            );
+            $rawText = $this->extractPlainText($chunk['nodes'], $citeOffsets);
+            $bodyText = $this->normalizeWhitespace($rawText);
+            foreach ($citeOffsets as $refNo => &$offsets) {
+                foreach ($offsets as &$offset) {
+                    // A non-whitespace sentinel keeps the prefix's trailing spaces and
+                    // newlines while applying exactly the same normalization as the body.
+                    $prefix = mb_substr($rawText, 0, $offset['start'], 'UTF-8');
+                    $start = mb_strlen($this->normalizeWhitespace($prefix . "\u{200B}"), 'UTF-8') - 1;
+                    $marker = '[' . $refNo . ']';
+                    $end = $start + mb_strlen($marker, 'UTF-8');
+                    if (mb_substr($bodyText, $start, $end - $start, 'UTF-8') !== $marker) {
+                        throw new \RuntimeException("Unable to map footnote {$refNo} in {$filePath}");
+                    }
+                    $offset = ['start' => $start, 'end' => $end];
+                }
+                unset($offset);
+            }
+            unset($offsets);
 
             if ($bodyText === '') {
                 continue;
@@ -274,7 +363,7 @@ class ImportHtmlBooksFromFolder extends Command
                         $chunks[] = $current;
                     }
                     $current = [
-                        'heading_text' => $this->normalizeWhitespace($node->textContent ?? ''),
+                        'heading_text' => trim((string) preg_replace('/\s+/u', ' ', $node->textContent ?? '')),
                         'nodes'        => [],
                     ];
                     continue;
@@ -300,7 +389,7 @@ class ImportHtmlBooksFromFolder extends Command
      * Walk DOM nodes and return plain text.
      * - Skips <img> (handled separately)
      * - Skips .footnotes section
-     * - Converts footnote-ref anchors to [N] markers and records their byte offsets
+     * - Converts footnote-ref anchors to [N] markers and records Unicode character offsets
      * - Adds newlines around block-level elements
      *
      * @param \DOMNode[] $nodes
@@ -343,18 +432,39 @@ class ImportHtmlBooksFromFolder extends Command
                     }
                 }
 
-                // Block-level: open newline
-                if (in_array($node->tagName, [
+                // Table cells: a row stays on ONE line, cells separated by CELL_SEP, so the
+                // viewer can rebuild the table. Anything block-level inside a cell is flattened.
+                if (in_array($node->tagName, ['td', 'th'], true)) {
+                    $prev = $node->previousSibling;
+                    while ($prev && !($prev instanceof \DOMElement)) {
+                        $prev = $prev->previousSibling;
+                    }
+                    if ($prev) {
+                        $out .= self::CELL_SEP;
+                    }
+                } elseif (in_array($node->tagName, [
                     'p', 'div', 'section', 'header', 'main', 'article',
                     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
                     'li', 'table', 'tr',
                 ], true)) {
-                    $out .= "\n";
+                    // Block-level: open newline (a space when inside a table cell)
+                    $out .= ($node->tagName !== 'tr' && $node->tagName !== 'table'
+                        && $this->isInsideCell($node)) ? ' ' : "\n";
+                } elseif ($node->tagName === 'br') {
+                    $out .= $this->isInsideCell($node) ? ' ' : "\n";
                 }
             }
 
             if ($node->nodeType === XML_TEXT_NODE) {
-                $out .= $node->nodeValue;
+                $value  = (string) $node->nodeValue;
+                $parent = $node->parentNode instanceof \DOMElement ? strtolower($node->parentNode->tagName) : '';
+                // Indentation between <tr>/<td> is not content
+                if (trim($value) === '' && in_array($parent, ['table', 'thead', 'tbody', 'tfoot', 'tr'], true)) {
+                    return;
+                }
+                // In HTML a newline inside text is plain whitespace (pandoc hard-wraps at ~72 cols);
+                // real breaks come from block tags / <br>, otherwise sentences get cut in pieces.
+                $out .= preg_replace('/[ \t]*\n[ \t]*/u', ' ', $value);
                 return;
             }
 
@@ -363,12 +473,13 @@ class ImportHtmlBooksFromFolder extends Command
             }
 
             if ($node instanceof \DOMElement) {
-                // Block-level: close newline
+                // Block-level: close newline (a space when inside a table cell)
                 if (in_array($node->tagName, [
                     'p', 'div', 'section', 'header', 'main', 'article',
                     'li', 'table', 'tr',
                 ], true)) {
-                    $out .= "\n";
+                    $out .= ($node->tagName !== 'tr' && $node->tagName !== 'table'
+                        && $this->isInsideCell($node)) ? ' ' : "\n";
                 }
             }
         };
@@ -443,6 +554,11 @@ class ImportHtmlBooksFromFolder extends Command
     }
 
     // -------------------------------------------------------------------------
+
+    private function isInsideCell(\DOMNode $node): bool
+    {
+        return $this->isInsideTag($node, 'td') || $this->isInsideTag($node, 'th');
+    }
 
     private function isInsideTag(\DOMNode $node, string $tag): bool
     {
