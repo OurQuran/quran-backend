@@ -55,6 +55,8 @@ class QiraatDifferenceController extends Controller
             'page' => ['nullable', 'integer', 'min:1'],
             'surah' => ['nullable', 'integer', 'min:1', 'max:114'],
             'ayah' => ['nullable', 'integer', 'min:1'],
+            // Language of `explanation`: the stored text is Kurdish; `ar` returns the Arabic text where one exists.
+            'lang' => ['nullable', 'in:ku,ar'],
         ]);
 
         $resolvedId = QiraatImportMaps::resolveReadingId($qiraat_reading_id);
@@ -80,6 +82,19 @@ class QiraatDifferenceController extends Controller
         $totalCount = $query->count();
         $totalPages = (int) max(1, ceil($totalCount / $perPage));
         $items = $query->forPage($page, $perPage)->get();
+
+        // `explanation` is a jsonb object of languages ({"ku": ..., "ar": ...}); return the requested one and say
+        // which language it really is (Arabic is missing for part of the data, then Kurdish is the fallback).
+        $lang = $validated['lang'] ?? null;
+        $items->transform(function ($item) use ($lang) {
+            $texts = json_decode((string) $item->explanation, true) ?: [];
+            $chosen = ($lang !== null && trim((string) ($texts[$lang] ?? '')) !== '') ? $lang : null;
+            $chosen ??= isset($texts['ku']) ? 'ku' : array_key_first($texts);
+            $item->explanation = $chosen !== null ? (string) $texts[$chosen] : null;
+            $item->explanation_lang = $chosen;
+
+            return $item;
+        });
 
         if ($items->isEmpty()) {
             return $this->apiError('No qiraat differences found', 404);

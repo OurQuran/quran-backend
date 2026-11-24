@@ -267,7 +267,10 @@ class ImportQiraatDifferencesFromExcel extends Command
             'hafs_text' => $row['hafs'],
             'qiraat_options' => $qiraatText !== '' ? $qiraatText : ' ',
             'qiraat_text' => $qiraatText,
-            'explanation' => $row['explanation'] !== '' ? $row['explanation'] : null,
+            // multilingual jsonb: the Excel text is Kurdish; Arabic is added later by qiraat:import-explanations-ar
+            'explanation' => $row['explanation'] !== ''
+                ? json_encode(['ku' => $row['explanation']], JSON_UNESCAPED_UNICODE)
+                : null,
             'created_at' => $now,
             'updated_at' => $now,
         ];

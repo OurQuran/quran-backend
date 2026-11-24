@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 
 class QiraatImportMaps
 {
-    public const DEFAULT_XML_DATASET_ROOT = '/home/nightcore/Work/quran-data-kfgqpc';
+    public const DEFAULT_XML_DATASET_ROOT = __DIR__ . '/../../../quran-data-kfgqpc'; // sibling repo: <workspace>/quran-data-kfgqpc
     public const BASE_READING_CODE = 'asim_hafs';
 
     public static function readingDefinitions(): array
@@ -281,67 +281,67 @@ class QiraatImportMaps
                 'name' => 'القراءات - ابن عامر الشامي (هشام وابن ذكوان)',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/05 كتاب ابن عامر -النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/01.pdf',
             ],
             [
                 'name' => 'القراءات - ابن كثير المكي (البزي وقنبل)',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/01 كتاب ابن كثير -النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/02.pdf',
             ],
             [
                 'name' => 'القراءات - أبو عمرو البصري (الدوري والسوسي)',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/02 كتاب ابو عمرو البصري-النسخة الكردية-3.pdf',
+                'pdf_path' => 'books/layout-v2/03.pdf',
             ],
             [
                 'name' => 'رواية قالون عن نافع',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/03 كتاب قالون-النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/04.pdf',
             ],
             [
                 'name' => 'رواية ورش عن نافع',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/04 كتاب ورش -النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/05.pdf',
             ],
             [
                 'name' => 'القراءات - أبو جعفر المدني (ابن وردان وابن جماز)',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/09 كتاب ابو جعفر-النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/06.pdf',
             ],
             [
                 'name' => 'القراءات - الكسائي الكوفي (أبو الحارث والدوري)',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/08 كتاب الكسائي -النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/07.pdf',
             ],
             [
                 'name' => 'القراءات - حمزة الزيات (خلف وخلاد)',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/07 كتاب حمزة-النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/08.pdf',
             ],
             [
                 'name' => 'القراءات - خلف العاشر (إسحاق وإدريس)',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/11 كتاب خلف العاشر -النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/09.pdf',
             ],
             [
                 'name' => 'رواية شعبة عن عاصم',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/06 كتاب شعبة -النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/10.pdf',
             ],
             [
                 'name' => 'القراءات - يعقوب الحضرمي (رويس وروح)',
                 'authors' => [$authorName],
                 'supervisors' => [$supervisorName],
-                'pdf_path' => 'books/10 كتاب يعقوب الحضرمي-النسخة الكردية.pdf',
+                'pdf_path' => 'books/layout-v2/11.pdf',
             ],
         ];
     }
@@ -383,20 +383,20 @@ class QiraatImportMaps
 
     /**
      * Download PDFs of the Arabic editions (books.language = 'ar'), keyed by canonical book name.
-     * Files live in storage/app/private/books/ (see BookController::bookPdfPath); the book importer
-     * sets books.pdf_path from this map when the file exists.
+     * Files live in storage/app/private/books/layout-v2/ (see BookController::bookPdfPath); the book importer
+     * sets books.pdf_path from this map when the file exists (or from --pdf-dir).
      */
     public static function arabicBookPdfByName(): array
     {
         return [
-            'القراءات - ابن عامر الشامي (هشام وابن ذكوان)' => 'كتاب ابن عامر -النسخة العربية.pdf',
-            'القراءات - ابن كثير المكي (البزي وقنبل)' => 'كتاب ابن كثير -النسخة العربية.pdf',
-            'القراءات - أبو عمرو البصري (الدوري والسوسي)' => 'كتاب ابو عمرو البصري -النسخة العربية.pdf',
-            'رواية قالون عن نافع' => 'كتاب قالون -النسخة العربية.pdf',
-            'رواية ورش عن نافع' => 'كتاب ورش -النسخة العربية.pdf',
-            'القراءات - الكسائي الكوفي (أبو الحارث والدوري)' => 'كتاب الكسائي -النسخة العربية.pdf',
-            'القراءات - حمزة الزيات (خلف وخلاد)' => 'كتاب حمزة -النسخة العربية.pdf',
-            'القراءات - يعقوب الحضرمي (رويس وروح)' => 'كتاب يعقوب الحضرمي -النسخة العربية.pdf',
+            'القراءات - ابن عامر الشامي (هشام وابن ذكوان)' => 'layout-v2/ar_01_ibn_amir.pdf',
+            'القراءات - ابن كثير المكي (البزي وقنبل)' => 'layout-v2/ar_02_ibn_kathir.pdf',
+            'القراءات - أبو عمرو البصري (الدوري والسوسي)' => 'layout-v2/ar_03_abu_amr.pdf',
+            'رواية قالون عن نافع' => 'layout-v2/ar_04_qalun.pdf',
+            'رواية ورش عن نافع' => 'layout-v2/ar_05_warsh.pdf',
+            'القراءات - الكسائي الكوفي (أبو الحارث والدوري)' => 'layout-v2/ar_07_kisai.pdf',
+            'القراءات - حمزة الزيات (خلف وخلاد)' => 'layout-v2/ar_08_hamza.pdf',
+            'القراءات - يعقوب الحضرمي (رويس وروح)' => 'layout-v2/ar_11_yaqub.pdf',
         ];
     }
 }

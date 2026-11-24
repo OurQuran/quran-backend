@@ -988,7 +988,7 @@ class QuranController extends Controller
                     NULLIF(
                         concat_ws(' - ',
                             NULLIF(d.qiraat_text, ''),
-                            NULLIF(d.explanation, '')
+                            NULLIF(d.explanation->>'ku', '')
                         ),
                         ''
                     ),
